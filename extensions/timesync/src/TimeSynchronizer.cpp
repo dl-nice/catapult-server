@@ -34,7 +34,7 @@ namespace catapult { namespace timesync {
 		}
 
 		double GetCoupling(NodeAge nodeAge) {
-			auto ageToUse = std::max<int64_t>(nodeAge.unwrap() - filters::Start_Decay_After_Round, 0);
+			auto ageToUse = static_cast<double>(std::max<int64_t>(nodeAge.unwrap() - filters::Start_Decay_After_Round, 0));
 			return std::max(std::exp(-Coupling_Decay_Strength * ageToUse) * Coupling_Start, Coupling_Minimum);
 		}
 	}
@@ -67,8 +67,8 @@ namespace catapult { namespace timesync {
 		}
 
 		auto highValueAddressesSize = accountStateCacheView.highValueAddresses().size();
-		auto viewPercentage = static_cast<double>(samples.size()) / highValueAddressesSize;
-		auto importancePercentage = static_cast<double>(cumulativeImportance) / m_totalChainImportance.unwrap();
+		auto viewPercentage = static_cast<double>(samples.size()) / static_cast<double>(highValueAddressesSize);
+		auto importancePercentage = static_cast<double>(cumulativeImportance) / static_cast<double>(m_totalChainImportance.unwrap());
 		auto scaling = importancePercentage > viewPercentage ? 1.0 / importancePercentage : 1.0 / viewPercentage;
 		auto sum = sumScaledOffsets(importanceView, height, samples, scaling);
 		return TimeOffset(static_cast<int64_t>(GetCoupling(nodeAge) * sum));
@@ -79,7 +79,7 @@ namespace catapult { namespace timesync {
 			Height height,
 			const TimeSynchronizationSamples& samples) {
 		return utils::Sum(samples, [&importanceView, height](const auto& sample) {
-			return importanceView.getAccountImportanceOrDefault(sample.node().identityKey(), height).unwrap();
+			return importanceView.getAccountImportanceOrDefault(sample.identityKey(), height).unwrap();
 		});
 	}
 
@@ -93,10 +93,11 @@ namespace catapult { namespace timesync {
 		return utils::Sum(samples, [&importanceView, height, scaling, totalChainImportance, warningThresholdMillis](const auto& sample) {
 			int64_t offset = sample.timeOffsetToRemote();
 			CATAPULT_LOG_LEVEL(MapToLogLevel(warningThresholdMillis, offset))
-					<< sample.node().metadata().Name << ": network time offset to local node is " << offset << "ms";
+					<< sample.identityKey() << ": network time offset to local node is " << offset << "ms";
 
-			auto importance = importanceView.getAccountImportanceOrDefault(sample.node().identityKey(), height);
-			return scaling * offset * importance.unwrap() / totalChainImportance;
+			auto importance = importanceView.getAccountImportanceOrDefault(sample.identityKey(), height);
+			auto importancePercentage = static_cast<double>(importance.unwrap()) / static_cast<double>(totalChainImportance);
+			return scaling * static_cast<double>(offset) * importancePercentage;
 		});
 	}
 }}

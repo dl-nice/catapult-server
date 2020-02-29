@@ -31,27 +31,27 @@ namespace catapult { namespace validators {
 
 	namespace {
 		constexpr auto Relevant_Entity_Type = model::AccountOperationRestrictionTransaction::Entity_Type;
-		constexpr auto Restriction_Type = model::AccountRestrictionType::TransactionType | model::AccountRestrictionType::Outgoing;
+		constexpr auto Restriction_Flags = model::AccountRestrictionFlags::TransactionType | model::AccountRestrictionFlags::Outgoing;
 
 		bool Validate(const Notification& notification, const ValidatorContext& context) {
 			AccountRestrictionView view(context.Cache);
-			auto isRelevantEntityType = Relevant_Entity_Type == notification.Modification.Value;
+			auto isRelevantEntityType = Relevant_Entity_Type == notification.RestrictionValue;
 			auto isAllow = state::AccountRestrictionOperationType::Allow == notification.AccountRestrictionDescriptor.operationType();
 
 			// cannot delete relevant entity type for operation type Allow
-			if (model::AccountRestrictionModificationType::Del == notification.Modification.ModificationType)
+			if (model::AccountRestrictionModificationAction::Del == notification.Action)
 				return !(isAllow && isRelevantEntityType);
 
-			size_t numTypedRestrictions = 0;
+			size_t numRestrictionValues = 0;
 			if (view.initialize(model::PublicKeyToAddress(notification.Key, context.Network.Identifier))) {
-				auto typedRestriction = view.get<model::EntityType>(Restriction_Type);
-				numTypedRestrictions = typedRestriction.size();
+				const auto& restriction = view.get(Restriction_Flags);
+				numRestrictionValues = restriction.values().size();
 			}
 
 			// adding a value to an account restrictions should only be allowed when
 			// - operation type Allow: if it is the relevant entity type or the relevant entity type is already contained
 			// - operation type Block: if it is not the relevant entity type
-			auto isAllowAndForbidden = isAllow && !isRelevantEntityType && 0 == numTypedRestrictions;
+			auto isAllowAndForbidden = isAllow && !isRelevantEntityType && 0 == numRestrictionValues;
 			auto isBlockAndForbidden = !isAllow && isRelevantEntityType;
 			return !(isAllowAndForbidden || isBlockAndForbidden);
 		}
@@ -60,6 +60,6 @@ namespace catapult { namespace validators {
 	DEFINE_STATEFUL_VALIDATOR(AccountOperationRestrictionNoSelfBlocking, [](
 			const Notification& notification,
 			const ValidatorContext& context) {
-		return Validate(notification, context) ? ValidationResult::Success : Failure_RestrictionAccount_Modification_Not_Allowed;
+		return Validate(notification, context) ? ValidationResult::Success : Failure_RestrictionAccount_Invalid_Modification;
 	});
 }}

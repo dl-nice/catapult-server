@@ -47,7 +47,7 @@ namespace catapult { namespace test {
 		/// Prepares the builder using \a lockInfo.
 		void prepare(const state::SecretLockInfo& lockInfo) {
 			m_secret = lockInfo.Secret;
-			m_recipient = test::UnresolveXor(lockInfo.Recipient);
+			m_recipient = test::UnresolveXor(lockInfo.RecipientAddress);
 		}
 
 	private:
@@ -82,12 +82,12 @@ namespace catapult { namespace test {
 			return model::ProofPublicationNotification(m_signer, m_algorithm, m_secret, m_recipient);
 		}
 
-		/// Sets notification \a height.
+		/// Sets the notification \a height.
 		void setHeight(Height height) {
 			m_notificationHeight = height;
 		}
 
-		/// Sets notification \a algorithm.
+		/// Sets the notification \a algorithm.
 		void setAlgorithm(model::LockHashAlgorithm algorithm) {
 			m_algorithm = algorithm;
 		}
@@ -95,20 +95,20 @@ namespace catapult { namespace test {
 		/// Prepares the builder using \a lockInfo.
 		void prepare(const state::SecretLockInfo& lockInfo) {
 			m_secret = lockInfo.Secret;
-			m_recipient = test::UnresolveXor(lockInfo.Recipient);
+			m_recipient = test::UnresolveXor(lockInfo.RecipientAddress);
 		}
 
-		/// Returns notification height.
+		/// Gets the notification height.
 		auto notificationHeight() const {
 			return m_notificationHeight;
 		}
 
-		/// Returns notification hash.
+		/// Gets the notification hash.
 		const auto& hash() const {
 			return m_secret;
 		}
 
-		/// Returns notification recipient.
+		/// Gets the notification recipient.
 		const auto& recipient() const {
 			return m_recipient;
 		}

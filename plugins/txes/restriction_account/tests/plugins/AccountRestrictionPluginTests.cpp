@@ -36,7 +36,7 @@ namespace catapult { namespace plugins {
 				config.Plugins.emplace("catapult.plugins.restrictionaccount", utils::ConfigurationBag({{
 					"",
 					{
-						{ "maxAccountRestrictionValues", "10" },
+						{ "maxAccountRestrictionValues", "10" }
 					}
 				}}));
 
@@ -74,13 +74,10 @@ namespace catapult { namespace plugins {
 
 			static std::vector<std::string> GetStatelessValidatorNames() {
 				return {
-					"AccountRestrictionTypeValidator",
+					"AccountRestrictionFlagsValidator",
 
-					"AccountAddressRestrictionModificationTypesValidator",
 					"AccountAddressRestrictionNoSelfModificationValidator",
 
-					"AccountMosaicRestrictionModificationTypesValidator",
-					"AccountOperationRestrictionModificationTypesValidator",
 					"AccountOperationRestrictionModificationValuesValidator"
 				};
 			}

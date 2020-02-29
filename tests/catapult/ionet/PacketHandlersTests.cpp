@@ -36,8 +36,7 @@ namespace catapult { namespace ionet {
 
 		// marker is split up so that each nibble corresponds to a registered handler (the rightmost marker nibble
 		// corresponds to the last handler)
-		// if a handler is called, its corresponding nibble is set to the 1-based call index (so call order can be
-		// verified too)
+		// if a handler is called, its corresponding nibble is set to the 1-based call index (so call order can be verified too)
 		void RegisterHandlers(PacketHandlers& handlers, const std::vector<uint32_t>& types, uint32_t& marker) {
 			if (types.size() > sizeof(marker) * 2)
 				CATAPULT_THROW_RUNTIME_ERROR_1("marker is too small for requested number of handlers", marker);
@@ -55,42 +54,51 @@ namespace catapult { namespace ionet {
 			}
 		}
 
-		ServerPacketHandlerContext CreateDefaultContext() {
-			return ServerPacketHandlerContext({}, "");
-		}
-
-		size_t ProcessPacket(PacketHandlers& handlers, uint32_t type) {
+		bool ProcessPacket(const PacketHandlers& handlers, uint32_t type, const std::string& host = "") {
 			// Arrange:
 			Packet packet;
 			packet.Type = static_cast<PacketType>(type);
 
+			Key key;
+			ServerPacketHandlerContext handlerContext(key, host);
+
 			// Act:
-			auto context = CreateDefaultContext();
-			return handlers.process(packet, context);
+			return handlers.process(packet, handlerContext);
 		}
 	}
 
 	// region ServerPacketHandlerContext
 
-	TEST(TEST_CLASS, ServerPacketHandlerContextInitiallyHasNoResponse) {
+	TEST(TEST_CLASS, ServerPacketHandlerContextCanBeCreatedEmpty) {
+		// Act:
+		ServerPacketHandlerContext handlerContext;
+
+		// Assert:
+		EXPECT_FALSE(handlerContext.hasResponse());
+
+		EXPECT_EQ(Key(), handlerContext.key());
+		EXPECT_EQ("", handlerContext.host());
+	}
+
+	TEST(TEST_CLASS, ServerPacketHandlerContextCanBeCreatedAroundKeyAndHost) {
 		// Act:
 		auto key = test::GenerateRandomByteArray<Key>();
 		auto host = std::string("alice.com");
-		ServerPacketHandlerContext context(key, host);
+		ServerPacketHandlerContext handlerContext(key, host);
 
 		// Assert:
-		EXPECT_FALSE(context.hasResponse());
+		EXPECT_FALSE(handlerContext.hasResponse());
 
-		EXPECT_EQ(key, context.key());
-		EXPECT_EQ("alice.com", context.host());
+		EXPECT_EQ(key, handlerContext.key());
+		EXPECT_EQ("alice.com", handlerContext.host());
 	}
 
 	TEST(TEST_CLASS, ServerPacketHandlerCannotAccessUnsetResponse) {
 		// Arrange:
-		auto context = CreateDefaultContext();
+		ServerPacketHandlerContext handlerContext;
 
 		// Act + Assert:
-		EXPECT_THROW(context.response(), catapult_runtime_error);
+		EXPECT_THROW(handlerContext.response(), catapult_runtime_error);
 	}
 
 	TEST(TEST_CLASS, ServerPacketHandlerContextCanHaveResponseSet) {
@@ -98,53 +106,53 @@ namespace catapult { namespace ionet {
 		auto pPacket = CreateSharedPacket<Packet>(25);
 		auto key = test::GenerateRandomByteArray<Key>();
 		auto host = std::string("alice.com");
-		ServerPacketHandlerContext context(key, host);
+		ServerPacketHandlerContext handlerContext(key, host);
 
 		// Act:
-		context.response(PacketPayload(pPacket));
+		handlerContext.response(PacketPayload(pPacket));
 
 		// Assert:
-		EXPECT_TRUE(context.hasResponse());
-		test::AssertPacketPayload(*pPacket, context.response());
+		EXPECT_TRUE(handlerContext.hasResponse());
+		test::AssertPacketPayload(*pPacket, handlerContext.response());
 
-		EXPECT_EQ(key, context.key());
-		EXPECT_EQ("alice.com", context.host());
+		EXPECT_EQ(key, handlerContext.key());
+		EXPECT_EQ("alice.com", handlerContext.host());
 	}
 
 	TEST(TEST_CLASS, ServerPacketHandlerContextCannotChangeExplicitlySetResponse) {
 		// Arrange:
 		auto pPacket = CreateSharedPacket<Packet>(25);
-		auto context = CreateDefaultContext();
-		context.response(PacketPayload(pPacket));
+		ServerPacketHandlerContext handlerContext;
+		handlerContext.response(PacketPayload(pPacket));
 
 		// Act + Assert:
-		EXPECT_THROW(context.response(PacketPayload(pPacket)), catapult_runtime_error);
+		EXPECT_THROW(handlerContext.response(PacketPayload(pPacket)), catapult_runtime_error);
 	}
 
 	TEST(TEST_CLASS, ServerPacketHandlerContextHasResponseWhenExplicitlyUnset) {
 		// Arrange:
 		auto key = test::GenerateRandomByteArray<Key>();
 		auto host = std::string("alice.com");
-		ServerPacketHandlerContext context(key, host);
+		ServerPacketHandlerContext handlerContext(key, host);
 
 		// Act:
-		context.response(PacketPayload());
+		handlerContext.response(PacketPayload());
 
 		// Assert:
-		EXPECT_TRUE(context.hasResponse());
-		test::AssertPacketPayloadUnset(context.response());
+		EXPECT_TRUE(handlerContext.hasResponse());
+		test::AssertPacketPayloadUnset(handlerContext.response());
 
-		EXPECT_EQ(key, context.key());
-		EXPECT_EQ("alice.com", context.host());
+		EXPECT_EQ(key, handlerContext.key());
+		EXPECT_EQ("alice.com", handlerContext.host());
 	}
 
 	TEST(TEST_CLASS, ServerPacketHandlerContextCannotChangeExplicitlyUnsetResponse) {
 		// Arrange:
-		auto context = CreateDefaultContext();
-		context.response(PacketPayload());
+		ServerPacketHandlerContext handlerContext;
+		handlerContext.response(PacketPayload());
 
 		// Act + Assert:
-		EXPECT_THROW(context.response(PacketPayload()), catapult_runtime_error);
+		EXPECT_THROW(handlerContext.response(PacketPayload()), catapult_runtime_error);
 	}
 
 	// endregion
@@ -167,6 +175,17 @@ namespace catapult { namespace ionet {
 		// Assert:
 		EXPECT_EQ(0u, handlers.size());
 		EXPECT_EQ(45'987u, handlers.maxPacketDataSize());
+	}
+
+	TEST(TEST_CLASS, PacketHandlerForZeroTypeIsNotInitiallyRegistered) {
+		// Act:
+		Packet packet;
+		packet.Type = static_cast<PacketType>(0);
+		PacketHandlers handlers;
+
+		// Assert:
+		EXPECT_EQ(0u, handlers.size());
+		EXPECT_FALSE(handlers.canProcess(packet));
 	}
 
 	// endregion
@@ -200,6 +219,20 @@ namespace catapult { namespace ionet {
 
 		// Act + Assert:
 		EXPECT_THROW(RegisterHandler(handlers, 1), catapult_runtime_error);
+	}
+
+	TEST(TEST_CLASS, CanAddHandlerForZeroType) {
+		// Arrange:
+		Packet packet;
+		packet.Type = static_cast<PacketType>(0);
+		PacketHandlers handlers;
+
+		// Act:
+		RegisterHandler(handlers, 0);
+
+		// Assert:
+		EXPECT_EQ(1u, handlers.size());
+		EXPECT_TRUE(handlers.canProcess(packet));
 	}
 
 	// endregion
@@ -272,30 +305,7 @@ namespace catapult { namespace ionet {
 
 	// endregion
 
-	TEST(TEST_CLASS, PacketHandlerForZeroTypeIsNotInitiallyRegistered) {
-		// Act:
-		Packet packet;
-		packet.Type = static_cast<PacketType>(0);
-		PacketHandlers handlers;
-
-		// Assert:
-		EXPECT_EQ(0u, handlers.size());
-		EXPECT_FALSE(handlers.canProcess(packet));
-	}
-
-	TEST(TEST_CLASS, CanAddHandlerForZeroType) {
-		// Arrange:
-		Packet packet;
-		packet.Type = static_cast<PacketType>(0);
-		PacketHandlers handlers;
-
-		// Act:
-		RegisterHandler(handlers, 0);
-
-		// Assert:
-		EXPECT_EQ(1u, handlers.size());
-		EXPECT_TRUE(handlers.canProcess(packet));
-	}
+	// region process
 
 	namespace {
 		void AssertNoMatchingHandlers(uint32_t type) {
@@ -346,7 +356,7 @@ namespace catapult { namespace ionet {
 		auto pPacket = reinterpret_cast<Packet*>(&packetBuffer[0]);
 		pPacket->Size = Packet_Size;
 		pPacket->Type = static_cast<PacketType>(1);
-		auto handlerContext = CreateDefaultContext();
+		ServerPacketHandlerContext handlerContext;
 		handlers.process(*pPacket, handlerContext);
 
 		// Assert:
@@ -360,10 +370,10 @@ namespace catapult { namespace ionet {
 		PacketHandlers handlers;
 		auto numCallbackCalls = 0u;
 		for (auto i = 0u; i < Num_Handlers; ++i) {
-			handlers.registerHandler(static_cast<PacketType>(i), [i, &numCallbackCalls](const auto&, auto& context) {
+			handlers.registerHandler(static_cast<PacketType>(i), [i, &numCallbackCalls](const auto&, auto& handlerContext) {
 				auto pResponsePacket = CreateSharedPacket<Packet>();
 				pResponsePacket->Type = static_cast<PacketType>(0xFF ^ (1 << i));
-				context.response(PacketPayload(pResponsePacket));
+				handlerContext.response(PacketPayload(pResponsePacket));
 				++numCallbackCalls;
 			});
 		}
@@ -372,11 +382,81 @@ namespace catapult { namespace ionet {
 		Packet packet;
 		packet.Size = sizeof(Packet);
 		packet.Type = static_cast<PacketType>(2);
-		auto handlerContext = CreateDefaultContext();
+		ServerPacketHandlerContext handlerContext;
 		handlers.process(packet, handlerContext);
 
 		// Assert:
 		EXPECT_EQ(1u, numCallbackCalls);
 		EXPECT_EQ(static_cast<PacketType>(0xFB), handlerContext.response().header().Type);
 	}
+
+	// endregion
+
+	// region process + setAllowedHosts
+
+	namespace {
+		void AssertNoHostFiltering(const PacketHandlers& handlers, uint32_t type) {
+			// Sanity:
+			EXPECT_TRUE(handlers.canProcess(static_cast<PacketType>(type))) << type;
+
+			// Act + Assert:
+			for (auto host : { "", "nem", "nem.ninja", "FOO.BAR", "PREnem.ninja", "nem.ninjaPOST", "PREnem.ninjaPOST" })
+				EXPECT_TRUE(ProcessPacket(handlers, type, host)) << "type = " << type << ", host = " << host;
+		}
+
+		void AssertHostFiltering(const PacketHandlers& handlers, uint32_t type) {
+			// Sanity:
+			EXPECT_TRUE(handlers.canProcess(static_cast<PacketType>(type))) << type;
+
+			// Act + Assert:
+			for (auto host : { "nem.ninja", "FOO.BAR" })
+				EXPECT_TRUE(ProcessPacket(handlers, type, host)) << "type = " << type << ", host = " << host;
+
+			for (auto host : { "", "nem", "PREnem.ninja", "nem.ninjaPOST", "PREnem.ninjaPOST" })
+				EXPECT_FALSE(ProcessPacket(handlers, type, host)) << "type = " << type << ", host = " << host;
+		}
+	}
+
+	TEST(TEST_CLASS, HostFiltering_InitiallyAllHostsAreAllowed) {
+		// Arrange:
+		auto marker = 0u;
+		PacketHandlers handlers;
+		RegisterHandlers(handlers, { 1, 3, 5 }, marker);
+
+		// Act + Assert:
+		for (auto type : { 1u, 3u, 5u })
+			AssertNoHostFiltering(handlers, type);
+	}
+
+	TEST(TEST_CLASS, HostFiltering_CanBeSetToArbitraryHosts) {
+		// Arrange:
+		auto marker = 0u;
+		PacketHandlers handlers;
+		handlers.setAllowedHosts({ "nem.ninja", "FOO.BAR" });
+		RegisterHandlers(handlers, { 1, 3, 5 }, marker);
+
+		// Act + Assert:
+		for (auto type : { 1u, 3u, 5u })
+			AssertHostFiltering(handlers, type);
+	}
+
+	TEST(TEST_CLASS, HostFiltering_CanBeCleared) {
+		// Arrange:
+		auto marker = 0u;
+		PacketHandlers handlers;
+		handlers.setAllowedHosts({ "nem.ninja", "FOO.BAR" });
+		RegisterHandlers(handlers, { 1, 3, 5 }, marker);
+
+		handlers.setAllowedHosts({});
+		RegisterHandlers(handlers, { 2, 4, 6 }, marker);
+
+		// Act + Assert:
+		for (auto type : { 1u, 3u, 5u })
+			AssertHostFiltering(handlers, type);
+
+		for (auto type : { 2u, 4u, 6u })
+			AssertNoHostFiltering(handlers, type);
+	}
+
+	// endregion
 }}

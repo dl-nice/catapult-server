@@ -36,23 +36,23 @@ namespace catapult { namespace builders {
 		SecretLockBuilder(model::NetworkIdentifier networkIdentifier, const Key& signer);
 
 	public:
-		/// Sets the lock mosaic to \a mosaic.
+		/// Sets the secret to \a secret.
+		void setSecret(const Hash256& secret);
+
+		/// Sets the locked mosaic to \a mosaic.
 		void setMosaic(const model::UnresolvedMosaic& mosaic);
 
 		/// Sets the number of blocks for which a lock should be valid to \a duration.
 		void setDuration(BlockDuration duration);
 
-		/// Sets the hash alghoritm to \a hashAlgorithm.
+		/// Sets the hash algorithm to \a hashAlgorithm.
 		void setHashAlgorithm(model::LockHashAlgorithm hashAlgorithm);
 
-		/// Sets the secret to \a secret.
-		void setSecret(const Hash256& secret);
-
-		/// Sets the recipient of the locked mosaic to \a recipient.
-		void setRecipient(const UnresolvedAddress& recipient);
+		/// Sets the locked mosaic recipient address to \a recipientAddress.
+		void setRecipientAddress(const UnresolvedAddress& recipientAddress);
 
 	public:
-		/// Returns size of secret lock transaction.
+		/// Gets the size of secret lock transaction.
 		/// \note This returns size of a normal transaction not embedded transaction.
 		size_t size() const;
 
@@ -70,10 +70,10 @@ namespace catapult { namespace builders {
 		std::unique_ptr<TTransaction> buildImpl() const;
 
 	private:
+		Hash256 m_secret;
 		model::UnresolvedMosaic m_mosaic;
 		BlockDuration m_duration;
 		model::LockHashAlgorithm m_hashAlgorithm;
-		Hash256 m_secret;
-		UnresolvedAddress m_recipient;
+		UnresolvedAddress m_recipientAddress;
 	};
 }}

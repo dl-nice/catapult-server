@@ -27,16 +27,14 @@
 
 namespace catapult { namespace test {
 
-	using RegisterMongoSubsystem = consumer<mongo::MongoPluginManager&>;
-
 	template<typename TAction>
-	void RunTestAfterRegistration(const RegisterMongoSubsystem& registerSubsystem, TAction action) {
+	void RunTestAfterRegistration(decltype(::RegisterMongoSubsystem)* registerSubsystem, TAction action) {
 		// Arrange:
 		// - windows requires the caller to explicitly create a mongocxx instance before certain operations
 		//   like creating a mongocxx::pool (via MongoStorageContext)
 		mongocxx::instance::current();
-		mongo::MongoStorageContext mongoContext(test::DefaultDbUri(), "", nullptr, mongo::MongoErrorPolicy::Mode::Strict);
-		mongo::MongoPluginManager manager(mongoContext, model::NetworkIdentifier::Zero);
+		auto pMongoContext = CreateDefaultMongoStorageContext(DatabaseName());
+		mongo::MongoPluginManager manager(*pMongoContext, model::NetworkIdentifier::Zero);
 		registerSubsystem(manager);
 
 		// Act:

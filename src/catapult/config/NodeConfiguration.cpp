@@ -37,12 +37,14 @@ namespace catapult { namespace config {
 
 		LOAD_NODE_PROPERTY(Port);
 		LOAD_NODE_PROPERTY(ApiPort);
-		LOAD_NODE_PROPERTY(ShouldAllowAddressReuse);
-		LOAD_NODE_PROPERTY(ShouldUseSingleThreadPool);
-		LOAD_NODE_PROPERTY(ShouldUseCacheDatabaseStorage);
-		LOAD_NODE_PROPERTY(ShouldEnableAutoSyncCleanup);
+		LOAD_NODE_PROPERTY(MaxIncomingConnectionsPerIdentity);
 
-		LOAD_NODE_PROPERTY(ShouldEnableTransactionSpamThrottling);
+		LOAD_NODE_PROPERTY(EnableAddressReuse);
+		LOAD_NODE_PROPERTY(EnableSingleThreadPool);
+		LOAD_NODE_PROPERTY(EnableCacheDatabaseStorage);
+		LOAD_NODE_PROPERTY(EnableAutoSyncCleanup);
+
+		LOAD_NODE_PROPERTY(EnableTransactionSpamThrottling);
 		LOAD_NODE_PROPERTY(TransactionSpamThrottlingMaxBoostFee);
 
 		LOAD_NODE_PROPERTY(MaxBlocksPerSyncAttempt);
@@ -70,14 +72,19 @@ namespace catapult { namespace config {
 		LOAD_NODE_PROPERTY(TransactionDisruptorSize);
 		LOAD_NODE_PROPERTY(TransactionElementTraceInterval);
 
-		LOAD_NODE_PROPERTY(ShouldAbortWhenDispatcherIsFull);
-		LOAD_NODE_PROPERTY(ShouldAuditDispatcherInputs);
+		LOAD_NODE_PROPERTY(EnableDispatcherAbortWhenFull);
+		LOAD_NODE_PROPERTY(EnableDispatcherInputAuditing);
 
 		LOAD_NODE_PROPERTY(OutgoingSecurityMode);
 		LOAD_NODE_PROPERTY(IncomingSecurityModes);
 
 		LOAD_NODE_PROPERTY(MaxCacheDatabaseWriteBatchSize);
 		LOAD_NODE_PROPERTY(MaxTrackedNodes);
+
+		LOAD_NODE_PROPERTY(BatchVerificationRandomSource);
+
+		LOAD_NODE_PROPERTY(TrustedHosts);
+		LOAD_NODE_PROPERTY(LocalNetworks);
 
 #undef LOAD_NODE_PROPERTY
 
@@ -109,9 +116,32 @@ namespace catapult { namespace config {
 
 #undef LOAD_IN_CONNECTIONS_PROPERTY
 
-		utils::VerifyBagSizeLte(bag, 33 + 4 + 4 + 5);
+#define LOAD_BANNING_PROPERTY(NAME) utils::LoadIniProperty(bag, "banning", #NAME, config.Banning.NAME)
+
+		LOAD_BANNING_PROPERTY(DefaultBanDuration);
+		LOAD_BANNING_PROPERTY(MaxBanDuration);
+		LOAD_BANNING_PROPERTY(KeepAliveDuration);
+		LOAD_BANNING_PROPERTY(MaxBannedNodes);
+
+		LOAD_BANNING_PROPERTY(NumReadRateMonitoringBuckets);
+		LOAD_BANNING_PROPERTY(ReadRateMonitoringBucketDuration);
+		LOAD_BANNING_PROPERTY(MaxReadRateMonitoringTotalSize);
+
+#undef LOAD_BANNING_PROPERTY
+
+		utils::VerifyBagSizeLte(bag, 37 + 4 + 4 + 5 + 7);
 		return config;
 	}
 
 #undef LOAD_PROPERTY
+
+	// region utils
+
+	bool IsLocalHost(const std::string& host, const std::unordered_set<std::string>& localNetworks) {
+		return std::any_of(localNetworks.cbegin(), localNetworks.cend(), [&host](const auto& localNetwork) {
+			return host.size() >= localNetwork.size() && 0 == std::memcmp(&localNetwork[0], &host[0], localNetwork.size());
+		});
+	}
+
+	// endregion
 }}

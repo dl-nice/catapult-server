@@ -21,53 +21,49 @@
 #include "SharedKey.h"
 #include "CryptoUtils.h"
 #include "Hashes.h"
+#include "SecureZero.h"
 #include <cstring>
-
-extern "C" {
-#include <ref10/fe.h>
-#include <ref10/ge.h>
-#include <ref10/sc.h>
-}
 
 namespace catapult { namespace crypto {
 
-	SharedKey DeriveSharedKey(const KeyPair& keyPair, const Key& otherPublicKey, const Salt& salt) {
-		// prepare for scalar multiply
-		Hash512 privHash;
-		HashPrivateKey(keyPair.privateKey(), privHash);
+	SharedKey Hkdf_Hmac_Sha256_32(const Key& sharedSecret) {
+		Hash256 salt;
+		Hash256 pseudoRandomKey;
+		Hmac_Sha256(salt, sharedSecret, pseudoRandomKey);
 
-		// fieldElement(privHash[0:256])
-		privHash[0] &= 0xF8;
-		privHash[31] &= 0x7F;
-		privHash[31] |= 0x40;
+		// specialized for single repetition, last byte contains counter value
+		constexpr auto Buffer_Length = 8 + 1;
+		std::array<uint8_t, Buffer_Length> buffer{ { 0x63, 0x61, 0x74, 0x61, 0x70, 0x75, 0x6C, 0x74, 0x01 } };
 
-		// A = public key
-		ge_p3 A;
-		ge_frombytes_negate_vartime(&A, otherPublicKey.data());
+		Hash256 outputKeyingMaterial;
+		Hmac_Sha256(pseudoRandomKey, buffer, outputKeyingMaterial);
 
-		// R = privHash * A
-		Hash512 zero{};
-		ge_p2 R;
-		ge_double_scalarmult_vartime(&R, privHash.data(), &A, zero.data());
-		fe_neg(R.X, R.X);
+		SharedKey sharedKey;
+		std::memcpy(sharedKey.data(), outputKeyingMaterial.data(), outputKeyingMaterial.size());
+		SecureZero(pseudoRandomKey);
+		SecureZero(outputKeyingMaterial);
+		return sharedKey;
+	}
 
-		// store result
-		Hash256 saltedResult;
-		ge_tobytes(saltedResult.data(), &R);
+	Key DeriveSharedSecret(const KeyPair& keyPair, const Key& otherPublicKey) {
+		ScalarMultiplier multiplier;
+		ExtractMultiplier(keyPair.privateKey(), multiplier);
 
-		// salt and hash
-		for (auto i = 0u; i < saltedResult.size(); ++i)
-			saltedResult[i] ^= salt[i];
+		Key sharedSecret;
+		if (!ScalarMult(multiplier, otherPublicKey, sharedSecret))
+			return Key();
 
-		Hash256 hash;
-#ifdef SIGNATURE_SCHEME_NIS1
-		Keccak_256(saltedResult, hash);
-#else
-		Sha3_256(saltedResult, hash);
-#endif
+		SecureZero(multiplier);
+		return sharedSecret;
+	}
 
-		SharedKey shared;
-		std::memcpy(shared.data(), hash.data(), SharedKey::Size);
-		return shared;
+	SharedKey DeriveSharedKey(const KeyPair& keyPair, const Key& otherPublicKey) {
+		auto sharedSecret = DeriveSharedSecret(keyPair, otherPublicKey);
+		if (Key() == sharedSecret)
+			return SharedKey();
+
+		auto sharedKey = Hkdf_Hmac_Sha256_32(sharedSecret);
+		SecureZero(sharedSecret);
+		return sharedKey;
 	}
 }}

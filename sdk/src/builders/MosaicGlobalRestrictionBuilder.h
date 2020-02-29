@@ -42,23 +42,23 @@ namespace catapult { namespace builders {
 		/// Sets the identifier of the mosaic providing the restriction key to \a referenceMosaicId.
 		void setReferenceMosaicId(UnresolvedMosaicId referenceMosaicId);
 
-		/// Sets the restriction key relative to the reference mosaic id to \a restrictionKey.
+		/// Sets the restriction key relative to the reference mosaic identifier to \a restrictionKey.
 		void setRestrictionKey(uint64_t restrictionKey);
 
 		/// Sets the previous restriction value to \a previousRestrictionValue.
 		void setPreviousRestrictionValue(uint64_t previousRestrictionValue);
 
-		/// Sets the previous restriction type to \a previousRestrictionType.
-		void setPreviousRestrictionType(model::MosaicRestrictionType previousRestrictionType);
-
 		/// Sets the new restriction value to \a newRestrictionValue.
 		void setNewRestrictionValue(uint64_t newRestrictionValue);
+
+		/// Sets the previous restriction type to \a previousRestrictionType.
+		void setPreviousRestrictionType(model::MosaicRestrictionType previousRestrictionType);
 
 		/// Sets the new restriction type to \a newRestrictionType.
 		void setNewRestrictionType(model::MosaicRestrictionType newRestrictionType);
 
 	public:
-		/// Returns size of mosaic global restriction transaction.
+		/// Gets the size of mosaic global restriction transaction.
 		/// \note This returns size of a normal transaction not embedded transaction.
 		size_t size() const;
 
@@ -80,8 +80,8 @@ namespace catapult { namespace builders {
 		UnresolvedMosaicId m_referenceMosaicId;
 		uint64_t m_restrictionKey;
 		uint64_t m_previousRestrictionValue;
-		model::MosaicRestrictionType m_previousRestrictionType;
 		uint64_t m_newRestrictionValue;
+		model::MosaicRestrictionType m_previousRestrictionType;
 		model::MosaicRestrictionType m_newRestrictionType;
 	};
 }}

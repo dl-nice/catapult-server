@@ -42,8 +42,8 @@ namespace catapult { namespace validators {
 			auto lockInfo = test::BasicSecretLockInfoTestTraits::CreateLockInfo(Expiration_Height);
 			lockInfo.HashAlgorithm = model::LockHashAlgorithm::Op_Sha3_256;
 			lockInfo.Secret = hash;
-			lockInfo.Recipient = test::CreateResolverContextXor().resolve(recipient);
-			lockInfo.CompositeHash = model::CalculateSecretLockInfoHash(lockInfo.Secret, lockInfo.Recipient);
+			lockInfo.RecipientAddress = test::CreateResolverContextXor().resolve(recipient);
+			lockInfo.CompositeHash = model::CalculateSecretLockInfoHash(lockInfo.Secret, lockInfo.RecipientAddress);
 			return lockInfo;
 		}
 
@@ -124,7 +124,7 @@ namespace catapult { namespace validators {
 	TEST(TEST_CLASS, FailureWhenHashAlgorithmDoesNotMatch) {
 		// Arrange:
 		auto notificationBuilder = CreateNotificationBuilder();
-		notificationBuilder.setAlgorithm(model::LockHashAlgorithm::Op_Keccak_256);
+		notificationBuilder.setAlgorithm(model::LockHashAlgorithm::Op_Hash_256);
 
 		// Assert:
 		AssertValidationResult(Failure_LockSecret_Hash_Algorithm_Mismatch, notificationBuilder);

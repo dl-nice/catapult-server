@@ -72,6 +72,10 @@ namespace catapult { namespace cache {
 		return m_options.MinHarvesterBalance;
 	}
 
+	Amount BasicAccountStateCacheDelta::maxHarvesterBalance() const {
+		return m_options.MaxHarvesterBalance;
+	}
+
 	MosaicId BasicAccountStateCacheDelta::harvestingMosaicId() const {
 		return m_options.HarvestingMosaicId;
 	}
@@ -165,6 +169,14 @@ namespace catapult { namespace cache {
 
 	void BasicAccountStateCacheDelta::queueRemove(const Key& publicKey, Height height) {
 		m_queuedRemoveByPublicKey.emplace(height, publicKey);
+	}
+
+	void BasicAccountStateCacheDelta::clearRemove(const Address& address, Height height) {
+		m_queuedRemoveByAddress.erase(std::make_pair(height, address));
+	}
+
+	void BasicAccountStateCacheDelta::clearRemove(const Key& publicKey, Height height) {
+		m_queuedRemoveByPublicKey.erase(std::make_pair(height, publicKey));
 	}
 
 	void BasicAccountStateCacheDelta::commitRemovals() {

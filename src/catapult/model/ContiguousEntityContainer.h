@@ -19,12 +19,13 @@
 **/
 
 #pragma once
+#include "catapult/utils/IntegerMath.h"
 #include "catapult/exceptions.h"
 #include "catapult/types.h"
 
 namespace catapult { namespace model {
 
-	/// Polcies for handling iteration errors.
+	/// Policies for handling iteration errors.
 	enum class EntityContainerErrorPolicy {
 		/// Immediately throw when an iteration error is encounted.
 		Throw,
@@ -33,8 +34,8 @@ namespace catapult { namespace model {
 		Suppress
 	};
 
-	/// Container wrapper around contiguous memory structures that have a Size field
-	/// indicating their size in bytes.
+	/// Container wrapper around contiguous memory structures that have a Size field indicating size in bytes.
+	/// \note Container assumes structures are aligned on 8-byte boundaries.
 	template<typename TEntity>
 	class BasicContiguousEntityContainer final {
 	public:
@@ -85,16 +86,16 @@ namespace catapult { namespace model {
 				return reinterpret_cast<const uint8_t*>(pEntity);
 			}
 
-			static constexpr auto Advance(value_type* pEntity, size_t numBytes) {
-				return reinterpret_cast<value_type*>(ToBytePointer(pEntity) + numBytes);
-			}
-
 		public:
 			/// Creates an iterator around \a pStart and \a state with specified current position (\a pCurrent).
 			iterator(value_type* pStart, value_type* pCurrent, State& state)
 					: m_pStart(pStart)
-					, m_pCurrent(pCurrent ? pCurrent : Advance(m_pStart, state.Size))
+					, m_pCurrent(pCurrent)
 					, m_state(state) {
+				// only advance when m_pStart is a valid poiner (m_pStart may be nullptr when empty)
+				if (!m_pCurrent && m_pStart)
+					m_pCurrent = advance(m_pStart, m_state.Size); // advance to end
+
 				checkError();
 			}
 
@@ -115,7 +116,7 @@ namespace catapult { namespace model {
 				if (isEnd(m_pCurrent))
 					CATAPULT_THROW_OUT_OF_RANGE("cannot advance iterator beyond end");
 
-				m_pCurrent = Advance(m_pCurrent, m_pCurrent->Size);
+				m_pCurrent = advance(m_pCurrent, m_pCurrent->Size);
 				if (isEnd(m_pCurrent))
 					return *this;
 
@@ -131,12 +132,12 @@ namespace catapult { namespace model {
 			}
 
 		public:
-			/// Returns a reference to the current entity.
+			/// Gets a reference to the current entity.
 			reference operator*() const {
 				return *(this->operator->());
 			}
 
-			/// Returns a pointer to the current entity.
+			/// Gets a pointer to the current entity.
 			pointer operator->() const {
 				if (isEnd(m_pCurrent))
 					CATAPULT_THROW_OUT_OF_RANGE("cannot dereference at end");
@@ -153,11 +154,21 @@ namespace catapult { namespace model {
 			}
 
 			constexpr bool isEnd(value_type* pEntity) const noexcept {
-				return endBytePointer() == ToBytePointer(pEntity);
+				return !pEntity || endBytePointer() == ToBytePointer(pEntity);
 			}
 
 			constexpr auto endBytePointer() const noexcept {
 				return ToBytePointer(m_pStart) + m_state.Size;
+			}
+
+			auto advance(value_type* pEntity, size_t numBytes) {
+				auto* pNextEntityBytes = ToBytePointer(pEntity) + numBytes;
+
+				// if entity is not last one, it must be padded to an 8-byte boundary (last entity is not padded)
+				if (endBytePointer() != pNextEntityBytes)
+					pNextEntityBytes += utils::GetPaddingSize(numBytes, 8);
+
+				return reinterpret_cast<value_type*>(pNextEntityBytes);
 			}
 
 			void checkError() {
@@ -177,22 +188,22 @@ namespace catapult { namespace model {
 		};
 
 	public:
-		/// Returns a const iterator that represents the first entity.
+		/// Gets a const iterator that represents the first entity.
 		auto cbegin() const {
 			return iterator<const TEntity>(m_pStart, m_pStart, m_state);
 		}
 
-		/// Returns a const iterator that represents one past the last entity.
+		/// Gets a const iterator that represents one past the last entity.
 		auto cend() const {
 			return iterator<const TEntity>(m_pStart, nullptr, m_state);
 		}
 
-		/// Returns an iterator that represents the first entity.
+		/// Gets an iterator that represents the first entity.
 		auto begin() const {
 			return iterator<TEntity>(m_pStart, m_pStart, m_state);
 		}
 
-		/// Returns an iterator that represents one past the last entity.
+		/// Gets an iterator that represents one past the last entity.
 		auto end() const {
 			return iterator<TEntity>(m_pStart, nullptr, m_state);
 		}

@@ -51,14 +51,10 @@ namespace catapult { namespace plugins {
 
 		manager.addStatelessValidatorHook([networkIdentifier](auto& builder) {
 			builder
-				.add(validators::CreateAccountRestrictionTypeValidator())
+				.add(validators::CreateAccountRestrictionFlagsValidator())
 
-				.add(validators::CreateAccountAddressRestrictionModificationTypesValidator())
 				.add(validators::CreateAccountAddressRestrictionNoSelfModificationValidator(networkIdentifier))
 
-				.add(validators::CreateAccountMosaicRestrictionModificationTypesValidator())
-
-				.add(validators::CreateAccountOperationRestrictionModificationTypesValidator())
 				.add(validators::CreateAccountOperationRestrictionModificationValuesValidator());
 		});
 

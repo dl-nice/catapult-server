@@ -24,6 +24,7 @@
 #include "catapult/model/TransactionSelectionStrategy.h"
 #include "catapult/utils/FileSize.h"
 #include "catapult/utils/TimeSpan.h"
+#include <unordered_set>
 
 namespace catapult { namespace utils { class ConfigurationBag; } }
 
@@ -38,21 +39,24 @@ namespace catapult { namespace config {
 		/// Server api port.
 		unsigned short ApiPort;
 
+		/// Maximum number of incoming connections per identity over primary port.
+		uint32_t MaxIncomingConnectionsPerIdentity;
+
 		/// \c true if the server should reuse ports already in use.
-		bool ShouldAllowAddressReuse;
+		bool EnableAddressReuse;
 
 		/// \c true if a single thread pool should be used, \c false if multiple thread pools should be used.
-		bool ShouldUseSingleThreadPool;
+		bool EnableSingleThreadPool;
 
 		/// \c true if cache data should be saved in a database.
-		bool ShouldUseCacheDatabaseStorage;
+		bool EnableCacheDatabaseStorage;
 
 		/// \c true if temporary sync files should be automatically cleaned up.
 		/// \note This should be \c false if broker process is running.
-		bool ShouldEnableAutoSyncCleanup;
+		bool EnableAutoSyncCleanup;
 
 		/// \c true if transaction spam throttling should be enabled.
-		bool ShouldEnableTransactionSpamThrottling;
+		bool EnableTransactionSpamThrottling;
 
 		/// Maximum fee that will boost a transaction through the spam throttle when spam throttling is enabled.
 		Amount TransactionSpamThrottlingMaxBoostFee;
@@ -116,10 +120,10 @@ namespace catapult { namespace config {
 		uint32_t TransactionElementTraceInterval;
 
 		/// \c true if the process should terminate when any dispatcher is full.
-		bool ShouldAbortWhenDispatcherIsFull;
+		bool EnableDispatcherAbortWhenFull;
 
 		/// \c true if all dispatcher inputs should be audited.
-		bool ShouldAuditDispatcherInputs;
+		bool EnableDispatcherInputAuditing;
 
 		/// Security mode of outgoing connections initiated by this node.
 		ionet::ConnectionSecurityMode OutgoingSecurityMode;
@@ -132,6 +136,15 @@ namespace catapult { namespace config {
 
 		/// Maximum number of nodes to track in memory.
 		uint32_t MaxTrackedNodes;
+
+		/// Source of random numbers used in batch verification.
+		std::string BatchVerificationRandomSource;
+
+		/// Trusted hosts that are allowed to execute protected API calls on this node.
+		std::unordered_set<std::string> TrustedHosts;
+
+		/// Networks that should be treated as local.
+		std::unordered_set<std::string> LocalNetworks;
 
 	public:
 		/// Local node configuration.
@@ -182,6 +195,35 @@ namespace catapult { namespace config {
 		/// Incoming connections configuration.
 		IncomingConnectionsSubConfiguration IncomingConnections;
 
+	public:
+		/// Banning configuration.
+		struct BanningSubConfiguration {
+			/// Default duration for banning.
+			utils::TimeSpan DefaultBanDuration;
+
+			/// Maximum duration for banning.
+			utils::TimeSpan MaxBanDuration;
+
+			/// Duration to keep account in container after the ban expired.
+			utils::TimeSpan KeepAliveDuration;
+
+			/// Maximum number of banned nodes.
+			uint32_t MaxBannedNodes;
+
+			/// Number of read rate monitoring buckets (\c 0 to disable read rate monitoring).
+			uint16_t NumReadRateMonitoringBuckets;
+
+			/// Duration of each read rate monitoring bucket.
+			utils::TimeSpan ReadRateMonitoringBucketDuration;
+
+			/// Maximum size allowed during full read rate monitoring period.
+			utils::FileSize MaxReadRateMonitoringTotalSize;
+		};
+
+	public:
+		/// Bannning configuration
+		BanningSubConfiguration Banning;
+
 	private:
 		NodeConfiguration() = default;
 
@@ -193,4 +235,7 @@ namespace catapult { namespace config {
 		/// Loads a node configuration from \a bag.
 		static NodeConfiguration LoadFromBag(const utils::ConfigurationBag& bag);
 	};
+
+	/// Returns \c true when \a host is contained in \a localNetworks.
+	bool IsLocalHost(const std::string& host, const std::unordered_set<std::string>& localNetworks);
 }}

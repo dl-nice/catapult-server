@@ -24,25 +24,8 @@
 #include "catapult/config/CatapultDataDirectory.h"
 #include "catapult/extensions/LocalNodeChainScore.h"
 #include "catapult/extensions/LocalNodeStateFileStorage.h"
-#include "catapult/io/IndexFile.h"
 
 namespace catapult { namespace sync {
-
-	consumers::BlockChainSyncHandlers::CommitStepFunc CreateCommitStepHandler(const config::CatapultDataDirectory& dataDirectory) {
-		return [dataDirectory](auto step) {
-			io::IndexFile(dataDirectory.rootDir().file("commit_step.dat")).set(utils::to_underlying_type(step));
-
-			if (consumers::CommitOperationStep::All_Updated != step)
-				return;
-
-			auto stateChangeDirectory = dataDirectory.spoolDir("state_change");
-			auto syncIndexWriterFile = io::IndexFile(stateChangeDirectory.file("index_server.dat"));
-			if (!syncIndexWriterFile.exists())
-				return;
-
-			io::IndexFile(stateChangeDirectory.file("index.dat")).set(syncIndexWriterFile.get());
-		};
-	}
 
 	void AddSupplementalDataResiliency(
 			consumers::BlockChainSyncHandlers& syncHandlers,
@@ -53,14 +36,11 @@ namespace catapult { namespace sync {
 
 		// can't create any views (or storages) in PreStateWritten handler because cache lock is held by calling code
 		auto pStorages = std::make_shared<decltype(cache.storages())>(cache.storages());
-		syncHandlers.PreStateWritten = [preStateWrittenHandler, pStorages, dataDirectory, &score](
-				const auto& cacheDelta,
-				const auto& catapultState,
-				auto height) {
+		syncHandlers.PreStateWritten = [preStateWrittenHandler, pStorages, dataDirectory, &score](const auto& cacheDelta, auto height) {
 			extensions::LocalNodeStateSerializer serializer(dataDirectory.dir("state.tmp"));
-			serializer.save(cacheDelta, *pStorages, catapultState, score.get(), height);
+			serializer.save(cacheDelta, *pStorages, score.get(), height);
 
-			preStateWrittenHandler(cacheDelta, catapultState, height);
+			preStateWrittenHandler(cacheDelta, height);
 		};
 
 		auto commitStepHandler = syncHandlers.CommitStep;

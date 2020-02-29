@@ -21,8 +21,9 @@
 #include "AggregateTransactionTestUtils.h"
 #include "catapult/crypto/Signer.h"
 #include "catapult/utils/MemoryUtils.h"
-#include "tests/test/core/AddressTestUtils.h"
+#include "catapult/preprocessor.h"
 #include "tests/test/core/EntityTestUtils.h"
+#include "tests/test/nodeps/KeyTestUtils.h"
 #include "tests/TestHarness.h"
 
 namespace catapult { namespace test {
@@ -42,9 +43,9 @@ namespace catapult { namespace test {
 	model::DetachedCosignature GenerateValidCosignature(const Hash256& aggregateHash) {
 		model::Cosignature cosignature;
 		auto keyPair = GenerateKeyPair();
-		cosignature.Signer = keyPair.publicKey();
+		cosignature.SignerPublicKey = keyPair.publicKey();
 		crypto::Sign(keyPair, aggregateHash, cosignature.Signature);
-		return { cosignature.Signer, cosignature.Signature, aggregateHash };
+		return { cosignature.SignerPublicKey, cosignature.Signature, aggregateHash };
 	}
 
 	void FixCosignatures(const Hash256& aggregateHash, model::AggregateTransaction& aggregateTransaction) {
@@ -56,25 +57,29 @@ namespace catapult { namespace test {
 
 	AggregateTransactionWrapper CreateAggregateTransaction(uint8_t numTransactions) {
 		using TransactionType = model::AggregateTransaction;
-		uint32_t entitySize = sizeof(TransactionType) + numTransactions * sizeof(mocks::EmbeddedMockTransaction);
+
+		uint32_t transactionSize = sizeof(mocks::EmbeddedMockTransaction);
+		uint32_t entitySize = sizeof(TransactionType) + numTransactions * (transactionSize + utils::GetPaddingSize(transactionSize, 8));
+
 		AggregateTransactionWrapper wrapper;
 		auto pTransaction = utils::MakeUniqueWithSize<TransactionType>(entitySize);
 		pTransaction->Size = entitySize;
 		pTransaction->Type = model::Entity_Type_Aggregate_Bonded;
-		pTransaction->PayloadSize = numTransactions * sizeof(mocks::EmbeddedMockTransaction);
-		FillWithRandomData(pTransaction->Signer);
+		pTransaction->PayloadSize = entitySize - sizeof(TransactionType);
+		FillWithRandomData(pTransaction->SignerPublicKey);
 		FillWithRandomData(pTransaction->Signature);
 
-		auto* pSubTransaction = static_cast<mocks::EmbeddedMockTransaction*>(pTransaction->TransactionsPtr());
+		auto* pSubTransactionBytes = reinterpret_cast<uint8_t*>(pTransaction->TransactionsPtr());
 		for (auto i = 0u; i < numTransactions; ++i) {
-			pSubTransaction->Size = sizeof(mocks::EmbeddedMockTransaction);
+			auto* pSubTransaction = reinterpret_cast<mocks::EmbeddedMockTransaction*>(pSubTransactionBytes);
+			pSubTransaction->Size = transactionSize;
 			pSubTransaction->Data.Size = 0;
 			pSubTransaction->Type = mocks::EmbeddedMockTransaction::Entity_Type;
-			FillWithRandomData(pSubTransaction->Signer);
-			FillWithRandomData(pSubTransaction->Recipient);
+			FillWithRandomData(pSubTransaction->SignerPublicKey);
+			FillWithRandomData(pSubTransaction->RecipientPublicKey);
 
 			wrapper.SubTransactions.push_back(pSubTransaction);
-			++pSubTransaction;
+			pSubTransactionBytes += transactionSize + utils::GetPaddingSize(transactionSize, 8);
 		}
 
 		wrapper.pTransaction = std::move(pTransaction);
@@ -85,13 +90,13 @@ namespace catapult { namespace test {
 		auto pTransactionWithoutCosignatures = CopyEntity(aggregateTransaction);
 		uint32_t cosignaturesSize = static_cast<uint32_t>(aggregateTransaction.CosignaturesCount()) * sizeof(model::Cosignature);
 		pTransactionWithoutCosignatures->Size -= cosignaturesSize;
-		return std::move(pTransactionWithoutCosignatures);
+		return PORTABLE_MOVE(pTransactionWithoutCosignatures);
 	}
 
 	CosignaturesMap ToMap(const std::vector<model::Cosignature>& cosignatures) {
 		CosignaturesMap cosignaturesMap;
 		for (const auto& cosignature : cosignatures)
-			cosignaturesMap.emplace(cosignature.Signer, cosignature.Signature);
+			cosignaturesMap.emplace(cosignature.SignerPublicKey, cosignature.Signature);
 
 		return cosignaturesMap;
 	}
@@ -119,11 +124,11 @@ namespace catapult { namespace test {
 		auto numUnknownCosignatures = 0u;
 		const auto* pCosignature = aggregateStitchedTransaction.CosignaturesPtr();
 		for (auto i = 0u; i < aggregateStitchedTransaction.CosignaturesCount(); ++i) {
-			auto message = "cosigner " + ToString(pCosignature->Signer);
+			auto message = "cosignatory " + ToString(pCosignature->SignerPublicKey);
 
-			auto iter = expectedCosignaturesMap.find(pCosignature->Signer);
+			auto iter = expectedCosignaturesMap.find(pCosignature->SignerPublicKey);
 			if (expectedCosignaturesMap.cend() != iter) {
-				EXPECT_EQ(iter->first, pCosignature->Signer) << message;
+				EXPECT_EQ(iter->first, pCosignature->SignerPublicKey) << message;
 				EXPECT_EQ(iter->second, pCosignature->Signature) << message;
 				expectedCosignaturesMap.erase(iter);
 			} else {

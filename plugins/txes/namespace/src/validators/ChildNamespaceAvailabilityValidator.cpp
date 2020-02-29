@@ -38,7 +38,7 @@ namespace catapult { namespace validators {
 
 			auto namespaceIter = cache.find(notification.ParentId);
 			if (!namespaceIter.tryGet())
-				return Failure_Namespace_Parent_Unknown;
+				return Failure_Namespace_Unknown_Parent;
 
 			const auto& parentEntry = namespaceIter.get();
 			const auto& parentPath = parentEntry.ns().path();
@@ -49,7 +49,7 @@ namespace catapult { namespace validators {
 			if (!root.lifetime().isActiveExcludingGracePeriod(height, cache.gracePeriodDuration()))
 				return Failure_Namespace_Expired;
 
-			if (root.owner() != notification.Signer)
+			if (root.ownerPublicKey() != notification.Signer)
 				return Failure_Namespace_Owner_Conflict;
 
 			return ValidationResult::Success;

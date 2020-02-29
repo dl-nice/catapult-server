@@ -35,7 +35,7 @@ namespace catapult { namespace cache {
 
 	using PtDataContainer = std::unordered_map<Hash256, PtData, utils::ArrayHasher<Hash256>>;
 
-	/// A read only view on top of partial transactions cache.
+	/// Read only view on top of partial transactions cache.
 	class MemoryPtCacheView {
 	private:
 		using UnknownTransactionInfos = std::vector<model::CosignedTransactionInfo>;
@@ -49,14 +49,14 @@ namespace catapult { namespace cache {
 				utils::SpinReaderWriterLock::ReaderLockGuard&& readLock);
 
 	public:
-		/// Returns the number of partial transactions in the cache.
+		/// Gets the number of partial transactions in the cache.
 		size_t size() const;
 
 		/// Finds a partial transaction in the cache with associated \a hash or returns \c nullptr if no such transaction exists.
 		model::WeakCosignedTransactionInfo find(const Hash256& hash) const;
 
 		/// Gets a range of short hash pairs of all transactions in the cache.
-		/// A short hash pair consists of the first 4 bytes of the transaction hash and the first 4 bytes of the cosignature hash.
+		/// Each short hash pair consists of the first 4 bytes of the transaction hash and the first 4 bytes of the cosignature hash.
 		ShortHashPairRange shortHashPairs() const;
 
 		/// Gets a vector of all unknown transaction infos in the cache that do not have a short hash pair in \a knownShortHashPairs.
@@ -68,8 +68,19 @@ namespace catapult { namespace cache {
 		utils::SpinReaderWriterLock::ReaderLockGuard m_readLock;
 	};
 
+	/// Interface (read write) for caching partial transactions.
+	class ReadWritePtCache : public PtCache {
+	public:
+		/// Gets a read only view based on this cache.
+		virtual MemoryPtCacheView view() const = 0;
+	};
+
 	/// Cache for all partial transactions.
-	class MemoryPtCache : public PtCache {
+	class MemoryPtCache : public ReadWritePtCache {
+	public:
+		using CacheWriteOnlyInterface = PtCache;
+		using CacheReadWriteInterface = ReadWritePtCache;
+
 	public:
 		/// Creates a partial transactions cache around \a options.
 		explicit MemoryPtCache(const MemoryCacheOptions& options);
@@ -78,10 +89,8 @@ namespace catapult { namespace cache {
 		~MemoryPtCache() override;
 
 	public:
-		/// Gets a read only view based on this cache.
-		MemoryPtCacheView view() const;
+		MemoryPtCacheView view() const override;
 
-	public:
 		PtCacheModifierProxy modifier() override;
 
 	private:
@@ -93,8 +102,8 @@ namespace catapult { namespace cache {
 		mutable utils::SpinReaderWriterLock m_lock;
 	};
 
-	/// A delegating proxy around a MemoryPtCache.
-	class MemoryPtCacheProxy : public MemoryCacheProxy<MemoryPtCache, PtCache, PtCacheModifierProxy> {
-		using MemoryCacheProxy<MemoryPtCache, PtCache, PtCacheModifierProxy>::MemoryCacheProxy;
+	/// Delegating proxy around a MemoryPtCache.
+	class MemoryPtCacheProxy : public MemoryCacheProxy<MemoryPtCache> {
+		using MemoryCacheProxy<MemoryPtCache>::MemoryCacheProxy;
 	};
 }}

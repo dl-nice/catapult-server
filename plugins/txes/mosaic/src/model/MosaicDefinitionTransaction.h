@@ -38,29 +38,26 @@ namespace catapult { namespace model {
 		DEFINE_TRANSACTION_CONSTANTS(Entity_Type_Mosaic_Definition, 1)
 
 	public:
-		/// Mosaic nonce.
-		catapult::MosaicNonce MosaicNonce;
-
-		/// Id of the mosaic.
+		/// Mosaic identifier.
 		/// \note This must match the generated id.
-		catapult::MosaicId MosaicId;
+		MosaicId Id;
 
-		/// Properties header.
-		MosaicPropertiesHeader PropertiesHeader;
+		/// Mosaic duration
+		BlockDuration Duration;
 
-		// followed by optional properties
-		DEFINE_TRANSACTION_VARIABLE_DATA_ACCESSORS(Properties, MosaicProperty)
+		/// Mosaic nonce.
+		MosaicNonce Nonce;
 
-	private:
-		template<typename T>
-		static auto* PropertiesPtrT(T& transaction) {
-			return transaction.PropertiesHeader.Count ? THeader::PayloadStart(transaction) : nullptr;
-		}
+		/// Mosaic flags.
+		MosaicFlags Flags;
+
+		/// Mosaic divisibility.
+		uint8_t Divisibility;
 
 	public:
 		/// Calculates the real size of mosaic definition \a transaction.
-		static constexpr uint64_t CalculateRealSize(const TransactionType& transaction) noexcept {
-			return sizeof(TransactionType) + transaction.PropertiesHeader.Count * sizeof(MosaicProperty);
+		static constexpr uint64_t CalculateRealSize(const TransactionType&) noexcept {
+			return sizeof(TransactionType);
 		}
 	};
 

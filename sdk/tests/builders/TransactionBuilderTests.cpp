@@ -64,20 +64,21 @@ namespace catapult { namespace builders {
 
 		void AssertCanBuildTransaction(const TransactionProperties& expectedProperties, const consumer<MockBuilder&>& buildTransaction) {
 			// Arrange:
-			auto networkId = static_cast<model::NetworkIdentifier>(0x62);
+			auto networkIdentifier = static_cast<model::NetworkIdentifier>(0x62);
 			auto signer = test::GenerateRandomByteArray<Key>();
 
 			// Act:
-			MockBuilder builder(networkId, signer);
+			MockBuilder builder(networkIdentifier, signer);
 			buildTransaction(builder);
 			auto pTransaction = builder.build();
 
 			// Assert:
-			EXPECT_EQ(signer, builder.signer());
+			EXPECT_EQ(signer, builder.signerPublicKey());
 			ASSERT_EQ(sizeof(mocks::MockTransaction) + Additional_Data_Size, pTransaction->Size);
 			EXPECT_EQ(Signature(), pTransaction->Signature);
-			EXPECT_EQ(signer, pTransaction->Signer);
-			EXPECT_EQ(0x62FF, pTransaction->Version);
+			EXPECT_EQ(signer, pTransaction->SignerPublicKey);
+			EXPECT_EQ(0xFFu, pTransaction->Version);
+			EXPECT_EQ(static_cast<model::NetworkIdentifier>(0x62), pTransaction->Network);
 			EXPECT_EQ(static_cast<model::EntityType>(mocks::MockTransaction::Entity_Type), pTransaction->Type);
 
 			AssertTransactionProperties(expectedProperties, *pTransaction);

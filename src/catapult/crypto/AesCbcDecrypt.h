@@ -26,6 +26,9 @@ namespace catapult { namespace crypto {
 	struct AesInitializationVector_tag { static constexpr size_t Size = 16; };
 	using AesInitializationVector = utils::ByteArray<AesInitializationVector_tag>;
 
-	// Decrypts \a input to \a output using AES with \a key in CBC mode.
+	/// Decrypts \a input to \a output using AES with \a key in CBC mode.
 	bool TryAesCbcDecrypt(const SharedKey& key, const RawBuffer& input, std::vector<uint8_t>& output);
+
+	/// Extracts ephemeral public key from \a encryptedWithKey and decrypts rest to \a decrypted using \a keyPair.
+	bool TryDecryptEd25199BlockCipher(const RawBuffer& encryptedWithKey, const KeyPair& keyPair, std::vector<uint8_t>& decrypted);
 }}

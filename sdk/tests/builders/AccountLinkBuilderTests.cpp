@@ -27,11 +27,11 @@ namespace catapult { namespace builders {
 
 	namespace {
 		auto GetLinkedAccountKey(const model::AccountLinkTransaction& transaction) {
-			return transaction.RemoteAccountKey;
+			return transaction.RemotePublicKey;
 		}
 
 		auto GetLinkedAccountKey(const model::EmbeddedAccountLinkTransaction& transaction) {
-			return transaction.RemoteAccountKey;
+			return transaction.RemotePublicKey;
 		}
 
 		struct AccountLinkTestTraits {
@@ -75,19 +75,20 @@ namespace catapult { namespace builders {
 				const typename TLinkTraits::TransactionProperties& expectedProperties,
 				const consumer<typename TLinkTraits::Builder&>& buildTransaction) {
 			// Arrange:
-			auto networkId = static_cast<model::NetworkIdentifier>(0x62);
+			auto networkIdentifier = static_cast<model::NetworkIdentifier>(0x62);
 			auto signer = test::GenerateRandomByteArray<Key>();
 
 			// Act:
-			typename TLinkTraits::Builder builder(networkId, signer);
+			typename TLinkTraits::Builder builder(networkIdentifier, signer);
 			buildTransaction(builder);
 			auto pTransaction = TTraits::InvokeBuilder(builder);
 
 			// Assert:
 			TTraits::CheckBuilderSize(0, builder);
 			TTraits::CheckFields(0, *pTransaction);
-			EXPECT_EQ(signer, pTransaction->Signer);
-			EXPECT_EQ(0x6201, pTransaction->Version);
+			EXPECT_EQ(signer, pTransaction->SignerPublicKey);
+			EXPECT_EQ(1u, pTransaction->Version);
+			EXPECT_EQ(static_cast<model::NetworkIdentifier>(0x62), pTransaction->Network);
 			EXPECT_EQ(TLinkTraits::Transaction_Type, pTransaction->Type);
 
 			TLinkTraits::AssertTransactionProperties(expectedProperties, *pTransaction);
@@ -108,7 +109,7 @@ namespace catapult { namespace builders {
 
 	TRAITS_BASED_TEST(CanCreateTransaction) {
 		// Arrange:
-		auto expectedProperties = typename TLinkTraits::TransactionProperties(model::AccountLinkAction::Link);
+		auto expectedProperties = typename TLinkTraits::TransactionProperties(model::AccountLinkAction::Unlink);
 
 		// Assert:
 		AssertCanBuildTransaction<TLinkTraits, TTraits>(expectedProperties, [](const auto&) {});
@@ -120,13 +121,13 @@ namespace catapult { namespace builders {
 
 	TRAITS_BASED_TEST(CanSetRemote) {
 		// Arrange:
-		auto expectedProperties = typename TLinkTraits::TransactionProperties(model::AccountLinkAction::Link);
+		auto expectedProperties = typename TLinkTraits::TransactionProperties(model::AccountLinkAction::Unlink);
 		test::FillWithRandomData(expectedProperties.LinkedAccountKey);
 		const auto& linkedAccountKey = expectedProperties.LinkedAccountKey;
 
 		// Assert:
 		AssertCanBuildTransaction<TLinkTraits, TTraits>(expectedProperties, [&linkedAccountKey](auto& builder) {
-			builder.setRemoteAccountKey(linkedAccountKey);
+			builder.setRemotePublicKey(linkedAccountKey);
 		});
 	}
 
@@ -149,7 +150,7 @@ namespace catapult { namespace builders {
 
 		// Assert:
 		AssertCanBuildTransaction<TLinkTraits, TTraits>(expectedProperties, [linkAction, &linkedAccountKey](auto& builder) {
-			builder.setRemoteAccountKey(linkedAccountKey);
+			builder.setRemotePublicKey(linkedAccountKey);
 			builder.setLinkAction(linkAction);
 		});
 	}

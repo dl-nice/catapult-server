@@ -22,29 +22,31 @@
 #include "src/model/LockHashAlgorithm.h"
 #include "src/model/LockHashUtils.h"
 #include "plugins/txes/lock_shared/src/state/LockInfo.h"
+#include "catapult/plugins.h"
 
 namespace catapult { namespace state {
 
-	/// A secret lock info.
-	struct SecretLockInfo : public LockInfo {
+	/// Secret lock info.
+	struct PLUGIN_API_DEPENDENCY SecretLockInfo : public LockInfo {
 	public:
 		/// Creates a default secret lock info.
 		SecretLockInfo() : LockInfo()
 		{}
 
-		/// Creates a secret lock info around \a account, \a mosaicId, \a amount, \a height, \a hashAlgorithm, \a secret and \a recipient.
+		/// Creates a secret lock info around \a senderPublicKey, \a mosaicId, \a amount, \a endHeight, \a hashAlgorithm, \a secret
+		/// and \a recipientAddress.
 		SecretLockInfo(
-				const Key& account,
+				const Key& senderPublicKey,
 				catapult::MosaicId mosaicId,
 				catapult::Amount amount,
-				catapult::Height height,
+				Height endHeight,
 				model::LockHashAlgorithm hashAlgorithm,
 				const Hash256& secret,
-				const catapult::Address& recipient)
-				: LockInfo(account, mosaicId, amount, height)
+				const catapult::Address& recipientAddress)
+				: LockInfo(senderPublicKey, mosaicId, amount, endHeight)
 				, HashAlgorithm(hashAlgorithm)
 				, Secret(secret)
-				, Recipient(recipient)
+				, RecipientAddress(recipientAddress)
 				, CompositeHash()
 		{}
 
@@ -55,8 +57,8 @@ namespace catapult { namespace state {
 		/// Secret.
 		Hash256 Secret;
 
-		/// Recipient of the locked mosaic.
-		catapult::Address Recipient;
+		/// Locked mosaic recipient address.
+		Address RecipientAddress;
 
 		/// Composite hash.
 		Hash256 CompositeHash;

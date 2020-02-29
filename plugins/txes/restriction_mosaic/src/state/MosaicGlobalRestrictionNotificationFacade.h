@@ -65,9 +65,7 @@ namespace catapult { namespace state {
 		/// Returns \c true if the notification indicates an unset value, which is required when adding a new value.
 		bool isUnset() const {
 			auto notificationRule = toRule();
-			return MosaicId() == notificationRule.ReferenceMosaicId
-					&& 0 == notificationRule.RestrictionValue
-					&& model::MosaicRestrictionType::NONE == notificationRule.RestrictionType;
+			return 0 == notificationRule.RestrictionValue && model::MosaicRestrictionType::NONE == notificationRule.RestrictionType;
 		}
 
 		/// Returns \c true if the notification and \a rule match.
@@ -78,7 +76,7 @@ namespace catapult { namespace state {
 					&& rule.RestrictionType == notificationRule.RestrictionType;
 		}
 
-		/// Returns rule described by the notification.
+		/// Gets the rule described by the notification.
 		RuleType toRule() const {
 			return {
 				m_resolvers.resolve(m_notification.ReferenceMosaicId),
@@ -87,7 +85,7 @@ namespace catapult { namespace state {
 			};
 		}
 
-		/// Returns restriction described by the notification.
+		/// Gets the restriction described by the notification.
 		MosaicGlobalRestriction toRestriction() const {
 			return MosaicGlobalRestriction(m_resolvers.resolve(m_notification.MosaicId));
 		}

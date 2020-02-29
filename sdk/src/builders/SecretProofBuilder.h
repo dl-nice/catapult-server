@@ -36,20 +36,20 @@ namespace catapult { namespace builders {
 		SecretProofBuilder(model::NetworkIdentifier networkIdentifier, const Key& signer);
 
 	public:
-		/// Sets the hash algorithm to \a hashAlgorithm.
-		void setHashAlgorithm(model::LockHashAlgorithm hashAlgorithm);
-
 		/// Sets the secret to \a secret.
 		void setSecret(const Hash256& secret);
 
-		/// Sets the recipient to \a recipient.
-		void setRecipient(const UnresolvedAddress& recipient);
+		/// Sets the hash algorithm to \a hashAlgorithm.
+		void setHashAlgorithm(model::LockHashAlgorithm hashAlgorithm);
+
+		/// Sets the locked mosaic recipient address to \a recipientAddress.
+		void setRecipientAddress(const UnresolvedAddress& recipientAddress);
 
 		/// Sets the proof data to \a proof.
 		void setProof(const RawBuffer& proof);
 
 	public:
-		/// Returns size of secret proof transaction.
+		/// Gets the size of secret proof transaction.
 		/// \note This returns size of a normal transaction not embedded transaction.
 		size_t size() const;
 
@@ -67,9 +67,9 @@ namespace catapult { namespace builders {
 		std::unique_ptr<TTransaction> buildImpl() const;
 
 	private:
-		model::LockHashAlgorithm m_hashAlgorithm;
 		Hash256 m_secret;
-		UnresolvedAddress m_recipient;
+		model::LockHashAlgorithm m_hashAlgorithm;
+		UnresolvedAddress m_recipientAddress;
 		std::vector<uint8_t> m_proof;
 	};
 }}

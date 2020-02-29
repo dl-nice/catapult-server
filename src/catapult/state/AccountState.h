@@ -42,9 +42,9 @@ namespace catapult { namespace state {
 	};
 
 	/// Account state data.
-	struct AccountState {
+	struct PLUGIN_API_DEPENDENCY AccountState {
 	public:
-		/// Creates an account state from an \a address and a height (\a addressHeight).
+		/// Creates an account state from \a address and \a addressHeight.
 		AccountState(const catapult::Address& address, Height addressHeight)
 				: Address(address)
 				, AddressHeight(addressHeight)
@@ -89,6 +89,6 @@ namespace catapult { namespace state {
 	/// Requires that \a remoteAccountState and \a mainAccountState state are linked.
 	void RequireLinkedRemoteAndMainAccounts(const AccountState& remoteAccountState, const AccountState& mainAccountState);
 
-	/// Applys a \a fee surplus at \a importanceHeight to \a accountState.
+	/// Applys \a fee surplus at \a importanceHeight to \a accountState.
 	void ApplyFeeSurplus(AccountState& accountState, const model::Mosaic& fee, model::ImportanceHeight importanceHeight);
 }}

@@ -53,7 +53,7 @@ namespace catapult { namespace consumers {
 	DEFINE_CONSUMER_RESULT(Remote_Chain_Unlinked, 7);
 
 	/// Validation failed because the remote chain difficulties do not match the calculated difficulties.
-	DEFINE_CONSUMER_RESULT(Remote_Chain_Mismatched_Difficulties, 8);
+	DEFINE_CONSUMER_RESULT(Remote_Chain_Difficulties_Mismatch, 8);
 
 	/// Validation failed because the remote chain score is not better.
 	DEFINE_CONSUMER_RESULT(Remote_Chain_Score_Not_Better, 9);
@@ -63,6 +63,9 @@ namespace catapult { namespace consumers {
 
 	/// Validation failed because the remote chain timestamp is too far in the future.
 	DEFINE_CONSUMER_RESULT(Remote_Chain_Too_Far_In_Future, 11);
+
+	/// Validation failed because the verification of the signature failed during a batch operation.
+	DEFINE_CONSUMER_RESULT(Batch_Signature_Not_Verifiable, 12);
 
 #ifndef CUSTOM_RESULT_DEFINITION
 }}

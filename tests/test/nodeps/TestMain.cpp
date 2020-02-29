@@ -21,6 +21,7 @@
 #include "catapult/utils/ConfigurationValueParsers.h"
 #include "catapult/utils/Logging.h"
 #include "catapult/version/version.h"
+#include "catapult/preprocessor.h"
 #include "tests/TestHarness.h"
 #include <thread>
 
@@ -50,7 +51,7 @@ namespace catapult { namespace test {
 	}
 
 	uint32_t GetNumDefaultPoolThreads() {
-		return 2 * std::thread::hardware_concurrency();
+		return std::max<uint32_t>(16, 2 * std::thread::hardware_concurrency());
 	}
 
 	namespace {
@@ -63,7 +64,7 @@ namespace catapult { namespace test {
 
 			auto pBootstrapper = std::make_shared<utils::LoggingBootstrapper>();
 			pBootstrapper->addConsoleLogger(options, utils::LogFilter(utils::LogLevel::Debug));
-			return std::move(pBootstrapper);
+			return PORTABLE_MOVE(pBootstrapper);
 		}
 
 		uint32_t GetArgumentUint32(const std::string& name, int argc, char** argv) {

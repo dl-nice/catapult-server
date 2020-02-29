@@ -33,7 +33,7 @@ namespace catapult { namespace io {
 		Read_Write,
 
 		/// Open file for both reading and writing.
-		Read_Append,
+		Read_Append
 	};
 
 	/// Defines locking mode for the file.
@@ -71,10 +71,10 @@ namespace catapult { namespace io {
 		/// Throws catapult_file_io_error exception if requested amount of data could not be read.
 		void read(const MutableRawBuffer& dataBuffer);
 
-		/// Returns size of the file.
+		/// Gets the size of the file.
 		uint64_t size() const;
 
-		/// Returns position in the file.
+		/// Gets the position in the file.
 		uint64_t position() const;
 
 	private:

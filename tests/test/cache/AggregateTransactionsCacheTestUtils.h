@@ -27,7 +27,7 @@ namespace catapult { namespace test {
 
 	// region MockTransactionsCache
 
-	/// A mock transactions cache.
+	/// Mock transactions cache.
 	template<typename TCache, typename TCacheModifier, typename TCacheModifierProxy>
 	class MockTransactionsCache : public TCache {
 	public:
@@ -49,7 +49,7 @@ namespace catapult { namespace test {
 
 	// region MockTransactionsChangeSubscriber
 
-	/// A mock transactions change subscriber.
+	/// Mock transactions change subscriber.
 	template<typename TChangeSubscriber, typename TFlushInfo>
 	class MockTransactionsChangeSubscriber : public TChangeSubscriber {
 	public:
@@ -66,6 +66,14 @@ namespace catapult { namespace test {
 		/// Gets all captured flush infos.
 		const std::vector<TFlushInfo>& flushInfos() const {
 			return m_flushInfos;
+		}
+
+	public:
+		/// Clears all added, removed and flush infos.
+		void reset() {
+			m_addedInfos.clear();
+			m_removedInfos.clear();
+			m_flushInfos.clear();
 		}
 
 	public:
@@ -124,7 +132,7 @@ namespace catapult { namespace test {
 
 	// endregion
 
-	/// A container of basic aggregate transactions cache tests.
+	/// Container of basic aggregate transactions cache tests.
 	template<typename TTraits>
 	struct BasicAggregateTransactionsCacheTests {
 	public:

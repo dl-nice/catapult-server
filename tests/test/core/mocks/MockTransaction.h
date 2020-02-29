@@ -35,25 +35,25 @@ namespace catapult { namespace mocks {
 			(static_cast<model::FacilityCode>(-1)), \
 			CODE)
 
-	/// A mock notification raised on the observer channel.
+	/// Mock notification raised on the observer channel.
 	DEFINE_MOCK_NOTIFICATION(Observer_1, 0xFFFF, Observer);
 
-	/// A second mock notification raised on the observer channel.
+	/// Second mock notification raised on the observer channel.
 	DEFINE_MOCK_NOTIFICATION(Observer_2, 0xFFFE, Observer);
 
-	/// A mock notification raised on the validator channel.
+	/// Mock notification raised on the validator channel.
 	DEFINE_MOCK_NOTIFICATION(Validator_1, 0xFFFF, Validator);
 
-	/// A second mock notification raised on the validator channel.
+	/// Second mock notification raised on the validator channel.
 	DEFINE_MOCK_NOTIFICATION(Validator_2, 0xFFFE, Validator);
 
-	/// A mock notification raised on all channels.
+	/// Mock notification raised on all channels.
 	DEFINE_MOCK_NOTIFICATION(All_1, 0xFFFF, All);
 
-	/// A second mock notification raised on all channels.
+	/// Second mock notification raised on all channels.
 	DEFINE_MOCK_NOTIFICATION(All_2, 0xFFFE, All);
 
-	/// A hash notification raised on no channels.
+	/// Hash notification raised on no channels.
 	DEFINE_MOCK_NOTIFICATION(Hash, 0xFFFD, None);
 
 #undef DEFINE_MOCK_NOTIFICATION
@@ -101,8 +101,8 @@ namespace catapult { namespace mocks {
 		};
 
 	public:
-		/// Transaction recipient.
-		Key Recipient;
+		/// Recipient public key.
+		Key RecipientPublicKey;
 
 		/// Variable data header.
 		VariableDataHeader Data;
@@ -116,18 +116,18 @@ namespace catapult { namespace mocks {
 		}
 
 	public:
-		/// Returns a const pointer to the variable data contained in this transaction.
+		/// Gets a const pointer to the variable data contained in this transaction.
 		const uint8_t* DataPtr() const {
 			return DataPtrT(*this);
 		}
 
-		/// Returns a pointer to the variable data contained in this transaction.
+		/// Gets a pointer to the variable data contained in this transaction.
 		uint8_t* DataPtr() {
 			return DataPtrT(*this);
 		}
 
 	public:
-		// Calculates the real size of mock \a transaction.
+		/// Calculates the real size of mock \a transaction.
 		static constexpr uint64_t CalculateRealSize(const TransactionType& transaction) noexcept {
 			return sizeof(TransactionType) + transaction.Data.Size;
 		}
@@ -145,7 +145,7 @@ namespace catapult { namespace mocks {
 	/// Creates an embedded mock transaction with variable data composed of \a dataSize random bytes.
 	std::unique_ptr<EmbeddedMockTransaction> CreateEmbeddedMockTransaction(uint16_t dataSize);
 
-	/// Creates a mock transaction with a \a fee and \a transfers.
+	/// Creates a mock transaction with \a fee and \a transfers.
 	std::unique_ptr<MockTransaction> CreateTransactionWithFeeAndTransfers(
 			Amount fee,
 			const std::vector<model::UnresolvedMosaic>& transfers);
@@ -154,7 +154,7 @@ namespace catapult { namespace mocks {
 	std::unique_ptr<MockTransaction> CreateMockTransactionWithSignerAndRecipient(const Key& signer, const Key& recipient);
 
 	/// Extracts public keys of additional accounts that must approve \a transaction.
-	utils::KeySet ExtractAdditionalRequiredCosigners(const EmbeddedMockTransaction& transaction);
+	utils::KeySet ExtractAdditionalRequiredCosignatories(const EmbeddedMockTransaction& transaction);
 
 	/// Mock transaction plugin options.
 	enum class PluginOptionFlags : uint8_t {

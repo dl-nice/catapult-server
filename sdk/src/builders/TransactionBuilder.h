@@ -19,7 +19,7 @@
 **/
 
 #pragma once
-#include "catapult/model/NetworkInfo.h"
+#include "catapult/model/NetworkIdentifier.h"
 #include "catapult/model/Transaction.h"
 #include "catapult/utils/Casting.h"
 #include "catapult/utils/MemoryUtils.h"
@@ -30,25 +30,25 @@ namespace catapult { namespace builders {
 	/// Base transaction builder.
 	class TransactionBuilder {
 	public:
-		/// Creates a transaction builder with \a networkIdentifier and \a signer.
-		TransactionBuilder(model::NetworkIdentifier networkIdentifier, const Key& signer)
+		/// Creates a transaction builder with \a networkIdentifier and \a signerPublicKey.
+		TransactionBuilder(model::NetworkIdentifier networkIdentifier, const Key& signerPublicKey)
 				: m_networkIdentifier(networkIdentifier)
-				, m_signer(signer)
+				, m_signerPublicKey(signerPublicKey)
 		{}
 
 	public:
-		/// Returns signer.
-		const Key& signer() const {
-			return m_signer;
+		/// Gets the signer public key.
+		const Key& signerPublicKey() const {
+			return m_signerPublicKey;
 		}
 
 	public:
-		/// Sets transaction \a deadline.
+		/// Sets the transaction \a deadline.
 		void setDeadline(catapult::Timestamp deadline) {
 			m_deadline = deadline;
 		}
 
-		/// Sets maximum transaction \a fee.
+		/// Sets the maximum transaction \a fee.
 		void setMaxFee(catapult::Amount fee) {
 			m_maxFee = fee;
 		}
@@ -70,9 +70,10 @@ namespace catapult { namespace builders {
 
 			// verifiable entity data
 			pTransaction->Size = utils::checked_cast<size_t, uint32_t>(size);
+			pTransaction->Version = TTransaction::Current_Version;
+			pTransaction->Network = m_networkIdentifier;
 			pTransaction->Type = TTransaction::Entity_Type;
-			pTransaction->Version = MakeVersion(m_networkIdentifier, TTransaction::Current_Version);
-			pTransaction->Signer = m_signer;
+			pTransaction->SignerPublicKey = m_signerPublicKey;
 
 			// transaction data
 			setAdditionalFields(*pTransaction);
@@ -90,7 +91,7 @@ namespace catapult { namespace builders {
 
 	private:
 		const model::NetworkIdentifier m_networkIdentifier;
-		const Key& m_signer;
+		const Key& m_signerPublicKey;
 
 		Timestamp m_deadline;
 		Amount m_maxFee;

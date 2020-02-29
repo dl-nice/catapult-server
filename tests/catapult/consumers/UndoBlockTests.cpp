@@ -36,17 +36,17 @@ namespace catapult { namespace consumers {
 	namespace {
 		constexpr auto CreateResolverContext = test::CreateResolverContextWithCustomDoublingMosaicResolver;
 
-		std::vector<uint16_t> GetExpectedVersions(uint16_t numTransactions, uint16_t seed) {
-			std::vector<uint16_t> versions;
+		std::vector<uint8_t> GetExpectedVersions(uint8_t numTransactions, uint8_t seed) {
+			std::vector<uint8_t> versions;
 			versions.push_back(seed); // block should be processed after all transactions, so it should be undone first
 
-			for (uint16_t i = 0u; i < numTransactions; ++i)
+			for (uint8_t i = 0u; i < numTransactions; ++i)
 				versions.push_back(seed + numTransactions - i);
 
 			return versions;
 		}
 
-		void SetVersions(model::Block& block, uint16_t seed) {
+		void SetVersions(model::Block& block, uint8_t seed) {
 			block.Version = seed;
 
 			for (auto& tx : block.Transactions())
@@ -61,7 +61,6 @@ namespace catapult { namespace consumers {
 			// Assert:
 			for (const auto& context : contexts) {
 				EXPECT_EQ(&state.Cache, &context.Cache);
-				EXPECT_EQ(&state.State, &context.State);
 				EXPECT_EQ(height, context.Height);
 				EXPECT_EQ(mode, context.Mode);
 
@@ -83,8 +82,7 @@ namespace catapult { namespace consumers {
 			auto pBlock = test::GenerateBlockWithTransactions(7, Height(10));
 			SetVersions(*pBlock, 22);
 
-			state::CatapultState catapultState;
-			observers::ObserverState state(delta, catapultState);
+			observers::ObserverState state(delta);
 
 			auto blockElement = test::BlockToBlockElement(*pBlock);
 
@@ -138,8 +136,7 @@ namespace catapult { namespace consumers {
 			auto pBlock = test::GenerateBlockWithTransactions(7, Height(10));
 			SetVersions(*pBlock, 22);
 
-			state::CatapultState catapultState;
-			observers::ObserverState state(delta, catapultState);
+			observers::ObserverState state(delta);
 
 			auto blockElement = test::BlockToBlockElement(*pBlock);
 			blockElement.SubCacheMerkleRoots = { Hash256() }; // trigger clear of account state cache

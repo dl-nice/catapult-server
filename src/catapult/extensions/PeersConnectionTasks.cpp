@@ -96,7 +96,7 @@ namespace catapult { namespace extensions {
 
 		class AddCandidateProcessor {
 		private:
-			using ConnectResult = std::pair<Key, net::PeerConnectCode>;
+			using ConnectResult = std::pair<model::NodeIdentity, net::PeerConnectCode>;
 			using ConnectResultsFuture = thread::future<std::vector<thread::future<ConnectResult>>>;
 
 		public:
@@ -136,7 +136,7 @@ namespace catapult { namespace extensions {
 					m_state.PacketWriters.connect(node, [node, pPromise](const auto& connectResult) {
 						CATAPULT_LOG_LEVEL(MapToLogLevel(connectResult.Code))
 								<< "connection attempt to " << node << " completed with " << connectResult.Code;
-						pPromise->set_value(std::make_pair(node.identityKey(), connectResult.Code));
+						pPromise->set_value(std::make_pair(node.identity(), connectResult.Code));
 					});
 				}
 
@@ -195,15 +195,19 @@ namespace catapult { namespace extensions {
 		auto serviceId = settings.ServiceId;
 		auto ager = CreateNodeAger(serviceId, settings.Config, settings.Nodes);
 		return thread::CreateNamedTask("connect peers task", [serviceId, ager, selector, &nodes = settings.Nodes, &packetWriters]() {
-			// 1. age all connections
-			ager(packetWriters.identities());
+			auto activeIdentities = packetWriters.identities();
 
-			// 2. select add and remove candidates
+			// 1. select add and remove candidates
 			auto result = selector();
 
-			// 3. process remove candidates
-			for (const auto& key : result.RemoveCandidates)
-				packetWriters.closeOne(key);
+			// 2. process remove candidates
+			for (const auto& identity : result.RemoveCandidates) {
+				packetWriters.closeOne(identity);
+				activeIdentities.erase(identity);
+			}
+
+			// 3. age all active connections
+			ager(activeIdentities);
 
 			// 4. process add candidates
 			AddCandidateProcessor processor({ nodes, packetWriters, serviceId });
@@ -239,15 +243,19 @@ namespace catapult { namespace extensions {
 		auto serviceId = settings.ServiceId;
 		auto ager = CreateNodeAger(serviceId, settings.Config, settings.Nodes);
 		return thread::CreateNamedTask("age peers task", [serviceId, ager, selector, &connectionContainer]() {
-			// 1. age all connections
-			ager(connectionContainer.identities());
+			auto activeIdentities = connectionContainer.identities();
 
-			// 2. select remove candidates
+			// 1. select remove candidates
 			auto removeCandidates = selector();
 
-			// 3. process remove candidates
-			for (const auto& key : removeCandidates)
-				connectionContainer.closeOne(key);
+			// 2. process remove candidates
+			for (const auto& identity : removeCandidates) {
+				connectionContainer.closeOne(identity);
+				activeIdentities.erase(identity);
+			}
+
+			// 3. age all active connections
+			ager(activeIdentities);
 
 			return thread::make_ready_future(thread::TaskResult::Continue);
 		});

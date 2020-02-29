@@ -35,6 +35,8 @@ namespace catapult { namespace model {
 
 	namespace {
 		struct BlockTraits {
+			static constexpr auto Footer_Size = Block::Footer_Size;
+
 			static std::unique_ptr<Block> Generate() {
 				return test::GenerateBlockWithTransactions(7, Height(7));
 			}
@@ -45,6 +47,8 @@ namespace catapult { namespace model {
 		};
 
 		struct TransactionTraits {
+			static constexpr auto Footer_Size = 0u;
+
 			static std::unique_ptr<Transaction> Generate() {
 				return test::GenerateRandomTransaction();
 			}
@@ -89,7 +93,7 @@ namespace catapult { namespace model {
 		EXPECT_NE(originalHash, modifiedHash);
 	}
 
-	BASIC_HASH_TEST(HashDoesNotChangeWhenSPartOfSignatureChanges) {
+	BASIC_HASH_TEST(HashChangesWhenSPartOfSignatureChanges) {
 		// Arrange:
 		auto pEntity = TTraits::Generate();
 		auto generationHash = test::GenerateRandomByteArray<GenerationHash>();
@@ -100,7 +104,7 @@ namespace catapult { namespace model {
 		auto modifiedHash = TTraits::CalculateHash(*pEntity, generationHash);
 
 		// Assert:
-		EXPECT_EQ(originalHash, modifiedHash);
+		EXPECT_NE(originalHash, modifiedHash);
 	}
 
 	BASIC_HASH_TEST(HashChangesWhenSignerChanges) {
@@ -110,7 +114,7 @@ namespace catapult { namespace model {
 		auto originalHash = TTraits::CalculateHash(*pEntity, generationHash);
 
 		// Act:
-		pEntity->Signer[Key::Size / 2] ^= 0xFF;
+		pEntity->SignerPublicKey[Key::Size / 2] ^= 0xFF;
 		auto modifiedHash = TTraits::CalculateHash(*pEntity, generationHash);
 
 		// Assert:
@@ -124,7 +128,7 @@ namespace catapult { namespace model {
 		auto originalHash = TTraits::CalculateHash(*pEntity, generationHash);
 
 		// Act: change the last byte
-		auto* pLastByte = reinterpret_cast<uint8_t*>(pEntity.get() + 1) - 1;
+		auto* pLastByte = reinterpret_cast<uint8_t*>(pEntity.get() + 1) - TTraits::Footer_Size - 1;
 		++*pLastByte;
 		auto modifiedHash = TTraits::CalculateHash(*pEntity, generationHash);
 
@@ -144,7 +148,7 @@ namespace catapult { namespace model {
 		auto hash = CalculateHash(*pBlock);
 
 		// Assert:
-		EXPECT_EQ(test::Deterministic_Block_Hash_String, test::ToString(hash));
+		EXPECT_EQ(utils::ParseByteArray<Hash256>(test::Deterministic_Block_Hash_String), hash);
 	}
 
 	TEST(TEST_CLASS, BlockHashDoesNotChangeWhenBlockTransactionDataChanges) {
@@ -153,9 +157,22 @@ namespace catapult { namespace model {
 		auto originalHash = CalculateHash(*pBlock);
 
 		// Act: change a transaction deadline
-		//     (notice that in a properly constructed block, this change will cause the BlockTransactionsHash to change
+		//     (notice that in a properly constructed block, this change will cause the TransactionsHash to change
 		//      in this test, that field is not set so the before and after hashes are equal)
 		pBlock->TransactionsPtr()->Deadline = pBlock->TransactionsPtr()->Deadline + Timestamp(1);
+		auto modifiedHash = CalculateHash(*pBlock);
+
+		// Assert:
+		EXPECT_EQ(originalHash, modifiedHash);
+	}
+
+	TEST(TEST_CLASS, BlockHashDoesNotChangeWhenBlockFooterChanges) {
+		// Arrange:
+		auto pBlock = BlockTraits::Generate();
+		auto originalHash = CalculateHash(*pBlock);
+
+		// Act:
+		pBlock->BlockHeader_Reserved1 ^= 0xFFFFFFFF;
 		auto modifiedHash = CalculateHash(*pBlock);
 
 		// Assert:
@@ -175,7 +192,7 @@ namespace catapult { namespace model {
 		auto hash = CalculateHash(*pTransaction, generationHash);
 
 		// Assert:
-		EXPECT_EQ(test::Deterministic_Transaction_Hash_String, test::ToString(hash));
+		EXPECT_EQ(utils::ParseByteArray<Hash256>(test::Deterministic_Transaction_Hash_String), hash);
 	}
 
 	TEST(TEST_CLASS, TransactionHashChangesWhenGenerationHashChanges) {

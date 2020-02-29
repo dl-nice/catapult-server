@@ -29,13 +29,13 @@
 namespace catapult {
 	namespace cache {
 		class CatapultCache;
-		class MemoryUtCacheProxy;
+		class ReadWriteUtCache;
+		class UtCache;
 	}
 	namespace extensions { class LocalNodeChainScore; }
 	namespace io { class BlockStorageCache; }
 	namespace ionet { class NodeContainer; }
 	namespace plugins { class PluginManager; }
-	namespace state { struct CatapultState; }
 	namespace subscribers {
 		class NodeSubscriber;
 		class StateChangeSubscriber;
@@ -50,13 +50,12 @@ namespace catapult { namespace extensions {
 	/// State that is used as part of service registration.
 	class ServiceState {
 	public:
-		/// Creates service state around \a config, \a nodes, \a cache, \a state, \a storage, \a score, \a utCache, \a timeSupplier
+		/// Creates service state around \a config, \a nodes, \a cache, \a storage, \a score, \a utCache, \a timeSupplier
 		/// \a transactionStatusSubscriber, \a stateChangeSubscriber, \a nodeSubscriber, \a counters, \a pluginManager and \a pool.
 		ServiceState(
 				const config::CatapultConfiguration& config,
 				ionet::NodeContainer& nodes,
 				cache::CatapultCache& cache,
-				state::CatapultState& state,
 				io::BlockStorageCache& storage,
 				LocalNodeChainScore& score,
 				cache::MemoryUtCacheProxy& utCache,
@@ -70,7 +69,6 @@ namespace catapult { namespace extensions {
 				: m_config(config)
 				, m_nodes(nodes)
 				, m_cache(cache)
-				, m_state(state)
 				, m_storage(storage)
 				, m_score(score)
 				, m_utCache(utCache)
@@ -100,11 +98,6 @@ namespace catapult { namespace extensions {
 			return m_cache;
 		}
 
-		/// Gets the state.
-		auto& state() const {
-			return m_state;
-		}
-
 		/// Gets the storage.
 		auto& storage() const {
 			return m_storage;
@@ -116,8 +109,13 @@ namespace catapult { namespace extensions {
 		}
 
 		/// Gets the unconfirmed transactions cache.
-		auto& utCache() const {
-			return m_utCache;
+		const cache::ReadWriteUtCache& utCache() const {
+			return const_cast<const cache::MemoryUtCacheProxy&>(m_utCache).get();
+		}
+
+		/// Gets the unconfirmed transactions cache.
+		cache::UtCache& utCache() {
+			return m_utCache.get();
 		}
 
 		/// Gets the time supplier.
@@ -157,7 +155,7 @@ namespace catapult { namespace extensions {
 		}
 
 		/// Gets the tasks.
-		auto& tasks() {;
+		auto& tasks() {
 			return m_tasks;
 		}
 
@@ -186,7 +184,6 @@ namespace catapult { namespace extensions {
 		const config::CatapultConfiguration& m_config;
 		ionet::NodeContainer& m_nodes;
 		cache::CatapultCache& m_cache;
-		state::CatapultState& m_state;
 		io::BlockStorageCache& m_storage;
 		LocalNodeChainScore& m_score;
 		cache::MemoryUtCacheProxy& m_utCache;

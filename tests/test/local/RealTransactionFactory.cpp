@@ -20,7 +20,7 @@
 
 #include "RealTransactionFactory.h"
 #include "sdk/src/builders/AddressAliasBuilder.h"
-#include "sdk/src/builders/RegisterNamespaceBuilder.h"
+#include "sdk/src/builders/NamespaceRegistrationBuilder.h"
 #include "sdk/src/builders/TransferBuilder.h"
 #include "sdk/src/extensions/ConversionExtensions.h"
 #include "sdk/src/extensions/TransactionExtensions.h"
@@ -28,7 +28,8 @@
 #include "catapult/crypto/KeyPair.h"
 #include "catapult/crypto/Signer.h"
 #include "catapult/model/Address.h"
-#include "catapult/model/NetworkInfo.h"
+#include "catapult/model/NetworkIdentifier.h"
+#include "catapult/preprocessor.h"
 #include "tests/test/core/AddressTestUtils.h"
 #include "tests/test/core/BlockTestUtils.h"
 #include "tests/test/nodeps/Nemesis.h"
@@ -51,7 +52,7 @@ namespace catapult { namespace test {
 				const std::vector<uint8_t>& message,
 				const std::vector<model::UnresolvedMosaic>& mosaics) {
 			builders::TransferBuilder builder(Network_Identifier, signerPublicKey);
-			builder.setRecipient(recipient);
+			builder.setRecipientAddress(recipient);
 
 			if (!message.empty())
 				builder.setMessage(message);
@@ -62,7 +63,7 @@ namespace catapult { namespace test {
 			auto pTransfer = builder.build();
 			pTransfer->MaxFee = GenerateRandomValue<Amount>();
 			pTransfer->Deadline = GenerateRandomValue<Timestamp>();
-			return std::move(pTransfer);
+			return PORTABLE_MOVE(pTransfer);
 		}
 	}
 
@@ -95,17 +96,17 @@ namespace catapult { namespace test {
 
 	// region namespace transactions
 
-	std::unique_ptr<model::Transaction> CreateRegisterRootNamespaceTransaction(
+	std::unique_ptr<model::Transaction> CreateRootNamespaceRegistrationTransaction(
 			const crypto::KeyPair& signer,
 			const std::string& name,
 			BlockDuration duration) {
-		builders::RegisterNamespaceBuilder builder(Network_Identifier, signer.publicKey());
+		builders::NamespaceRegistrationBuilder builder(Network_Identifier, signer.publicKey());
 		builder.setName({ reinterpret_cast<const uint8_t*>(name.data()), name.size() });
 		builder.setDuration(duration);
 		auto pTransaction = builder.build();
 
 		extensions::TransactionExtensions(GetNemesisGenerationHash()).sign(signer, *pTransaction);
-		return std::move(pTransaction);
+		return PORTABLE_MOVE(pTransaction);
 	}
 
 	std::unique_ptr<model::Transaction> CreateRootAddressAliasTransaction(
@@ -116,10 +117,11 @@ namespace catapult { namespace test {
 		builders::AddressAliasBuilder builder(Network_Identifier, signer.publicKey());
 		builder.setNamespaceId(namespaceId);
 		builder.setAddress(address);
+		builder.setAliasAction(model::AliasAction::Link);
 		auto pTransaction = builder.build();
 
 		extensions::TransactionExtensions(GetNemesisGenerationHash()).sign(signer, *pTransaction);
-		return std::move(pTransaction);
+		return PORTABLE_MOVE(pTransaction);
 	}
 
 	// endregion

@@ -20,6 +20,7 @@
 
 #include "diagnostics/src/DiagnosticsService.h"
 #include "catapult/model/DiagnosticCounterValue.h"
+#include "tests/test/core/HandlersTrustedHostTests.h"
 #include "tests/test/core/PacketPayloadTestUtils.h"
 #include "tests/test/local/ServiceLocatorTestContext.h"
 #include "tests/test/local/ServiceTestUtils.h"
@@ -79,6 +80,8 @@ namespace catapult { namespace diagnostics {
 		EXPECT_EQ(&context.testState().state().cache(), capture.pCache);
 	}
 
+	ADD_HANDLERS_TRUSTED_HOSTS_TESTS(TestContext, ionet::PacketType::Diagnostic_Counters)
+
 	TEST(TEST_CLASS, CountersAreSourcedFromLocatorAndState) {
 		// Arrange: add counters to different sources
 		constexpr auto Num_Counters = 2u;
@@ -93,7 +96,7 @@ namespace catapult { namespace diagnostics {
 		// - process a counters request
 		auto pPacket = ionet::CreateSharedPacket<ionet::Packet>();
 		pPacket->Type = ionet::PacketType::Diagnostic_Counters;
-		ionet::ServerPacketHandlerContext handlerContext({}, "");
+		ionet::ServerPacketHandlerContext handlerContext;
 		EXPECT_TRUE(packetHandlers.process(*pPacket, handlerContext));
 
 		// Assert: header is correct and contains the expected number of counters

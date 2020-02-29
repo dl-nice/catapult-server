@@ -81,9 +81,12 @@ namespace catapult { namespace test {
 	}
 
 	ionet::Node CreateLocalPartnerNode() {
-		auto metadata = ionet::NodeMetadata(model::NetworkIdentifier::Zero, "PARTNER");
+		auto metadata = ionet::NodeMetadata(model::UniqueNetworkFingerprint(), "PARTNER");
 		metadata.Roles = ionet::NodeRoles::Api | ionet::NodeRoles::Peer;
-		return ionet::Node(LoadPartnerServerKeyPair().publicKey(), CreateLocalHostNodeEndpoint(GetLocalHostPort() + 10), metadata);
+		return ionet::Node(
+				{ LoadPartnerServerKeyPair().publicKey(), "127.0.0.1" },
+				CreateLocalHostNodeEndpoint(GetLocalHostPort() + 10),
+				metadata);
 	}
 
 	std::unique_ptr<local::LocalNode> BootLocalPartnerNode(
@@ -107,16 +110,16 @@ namespace catapult { namespace test {
 
 	void PrepareCatapultConfiguration(config::CatapultConfiguration& config, NodeFlag nodeFlag) {
 		if (HasFlag(NodeFlag::Cache_Database_Storage, nodeFlag))
-			const_cast<config::NodeConfiguration&>(config.Node).ShouldUseCacheDatabaseStorage = true;
+			const_cast<config::NodeConfiguration&>(config.Node).EnableCacheDatabaseStorage = true;
 
 		if (HasFlag(NodeFlag::Verify_Receipts, nodeFlag))
-			const_cast<model::BlockChainConfiguration&>(config.BlockChain).ShouldEnableVerifiableReceipts = true;
+			const_cast<model::BlockChainConfiguration&>(config.BlockChain).EnableVerifiableReceipts = true;
 
 		if (HasFlag(NodeFlag::Verify_State, nodeFlag))
-			const_cast<model::BlockChainConfiguration&>(config.BlockChain).ShouldEnableVerifiableState = true;
+			const_cast<model::BlockChainConfiguration&>(config.BlockChain).EnableVerifiableState = true;
 
 		if (HasFlag(NodeFlag::Auto_Sync_Cleanup, nodeFlag))
-			const_cast<config::NodeConfiguration&>(config.Node).ShouldEnableAutoSyncCleanup = true;
+			const_cast<config::NodeConfiguration&>(config.Node).EnableAutoSyncCleanup = true;
 	}
 
 	// endregion

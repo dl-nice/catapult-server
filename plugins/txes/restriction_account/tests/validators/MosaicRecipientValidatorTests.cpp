@@ -36,7 +36,7 @@ namespace catapult { namespace validators {
 			auto& restrictionCacheDelta = delta.sub<cache::AccountRestrictionCache>();
 			restrictionCacheDelta.insert(state::AccountRestrictions(accountAddress));
 			auto& restrictions = restrictionCacheDelta.find(accountAddress).get();
-			auto& restriction = restrictions.restriction(model::AccountRestrictionType::MosaicId);
+			auto& restriction = restrictions.restriction(model::AccountRestrictionFlags::MosaicId);
 			for (auto mosaicId : mosaicIds)
 				TOperationTraits::Add(restriction, state::ToVector(mosaicId));
 
@@ -73,7 +73,7 @@ namespace catapult { namespace validators {
 
 		// Act:
 		AssertValidationResult<test::AllowTraits>(
-				Failure_RestrictionAccount_Mosaic_Transfer_Not_Allowed,
+				Failure_RestrictionAccount_Mosaic_Transfer_Prohibited,
 				accountAddress,
 				test::GenerateRandomDataVector<MosaicId>(3),
 				test::UnresolveXor(accountAddress),
@@ -87,7 +87,7 @@ namespace catapult { namespace validators {
 
 		// Act:
 		AssertValidationResult<test::BlockTraits>(
-				Failure_RestrictionAccount_Mosaic_Transfer_Not_Allowed,
+				Failure_RestrictionAccount_Mosaic_Transfer_Prohibited,
 				accountAddress,
 				values,
 				test::UnresolveXor(accountAddress),

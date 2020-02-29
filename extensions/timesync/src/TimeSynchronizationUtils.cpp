@@ -40,8 +40,8 @@ namespace catapult { namespace timesync {
 		ImportanceAwareNodeSelector CreateImportanceAwareNodeSelector(
 				const TimeSynchronizationConfiguration& timeSyncConfig,
 				const config::CatapultConfiguration& config) {
-			auto totalChainImportance = config.BlockChain.TotalChainImportance.unwrap();
-			auto minImportance = Importance(static_cast<uint64_t>(Required_Minimum_Importance * totalChainImportance));
+			auto rawMinImportance = Required_Minimum_Importance * static_cast<double>(config.BlockChain.TotalChainImportance.unwrap());
+			auto minImportance = Importance(static_cast<uint64_t>(rawMinImportance));
 			return ImportanceAwareNodeSelector(ionet::ServiceIdentifier(0x53594E43), timeSyncConfig.MaxNodes, minImportance);
 		}
 
@@ -89,7 +89,7 @@ namespace catapult { namespace timesync {
 					auto& samples = pSamplesResult->Samples;
 					if (net::NodeRequestResult::Success == pair.first) {
 						auto index = (pSamplesResult->NumValidSamples)++;
-						samples[index] = TimeSynchronizationSample(node, *pLocalTimestamps, pair.second);
+						samples[index] = TimeSynchronizationSample(node.identity().PublicKey, *pLocalTimestamps, pair.second);
 						CATAPULT_LOG(info) << "'" << node << "': time offset is " << samples[index].timeOffsetToRemote();
 						return true;
 					}

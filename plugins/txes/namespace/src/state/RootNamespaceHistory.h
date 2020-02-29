@@ -21,14 +21,15 @@
 #pragma once
 #include "RootNamespace.h"
 #include "catapult/utils/Functional.h"
+#include "catapult/plugins.h"
 #include <boost/optional.hpp>
 #include <list>
 #include <set>
 
 namespace catapult { namespace state {
 
-	/// A root namespace history.
-	class RootNamespaceHistory {
+	/// Root namespace history.
+	class PLUGIN_API_DEPENDENCY RootNamespaceHistory {
 	public:
 		static constexpr auto Is_Deactivation_Destructive = true;
 
@@ -83,10 +84,10 @@ namespace catapult { namespace state {
 		std::set<NamespaceId> prune(Height height);
 
 	public:
-		/// Returns a const iterator to the first root namespace.
+		/// Gets a const iterator to the first root namespace.
 		std::list<RootNamespace>::const_iterator begin() const;
 
-		/// Returns a const iterator to the element following the last root namespace.
+		/// Gets a const iterator to the element following the last root namespace.
 		std::list<RootNamespace>::const_iterator end() const;
 
 	public:

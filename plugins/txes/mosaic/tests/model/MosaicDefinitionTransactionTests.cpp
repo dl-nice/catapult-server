@@ -22,6 +22,7 @@
 #include "catapult/utils/MemoryUtils.h"
 #include "tests/test/core/TransactionTestUtils.h"
 #include "tests/test/core/VariableSizedEntityTestUtils.h"
+#include "tests/test/nodeps/Alignment.h"
 #include "tests/test/nodeps/NumericTestUtils.h"
 #include "tests/TestHarness.h"
 
@@ -29,25 +30,30 @@ namespace catapult { namespace model {
 
 #define TEST_CLASS MosaicDefinitionTransactionTests
 
-	// region size + properties
+	// region size + alignment + properties
+
+#define TRANSACTION_FIELDS FIELD(Id) FIELD(Duration) FIELD(Nonce) FIELD(Flags) FIELD(Divisibility)
 
 	namespace {
 		template<typename T>
-		void AssertEntityHasExpectedSize(size_t baseSize) {
+		void AssertTransactionHasExpectedSize(size_t baseSize) {
 			// Arrange:
-			auto expectedPropertiesHeaderSize =
-					sizeof(uint8_t) // count
-					+ sizeof(uint8_t) // flags
-					+ sizeof(uint8_t); // divisibility
-			auto expectedSize =
-					baseSize // base
-					+ sizeof(uint32_t) // nonce
-					+ sizeof(MosaicId) // id
-					+ expectedPropertiesHeaderSize;
+			auto expectedSize = baseSize;
+
+#define FIELD(X) expectedSize += sizeof(T::X);
+			TRANSACTION_FIELDS
+#undef FIELD
 
 			// Assert:
 			EXPECT_EQ(expectedSize, sizeof(T));
-			EXPECT_EQ(baseSize + 15u, sizeof(T));
+			EXPECT_EQ(baseSize + 22u, sizeof(T));
+		}
+
+		template<typename T>
+		void AssertTransactionHasProperAlignment() {
+#define FIELD(X) EXPECT_ALIGNED(T, X);
+			TRANSACTION_FIELDS
+#undef FIELD
 		}
 
 		template<typename T>
@@ -58,30 +64,9 @@ namespace catapult { namespace model {
 		}
 	}
 
+#undef TRANSACTION_FIELDS
+
 	ADD_BASIC_TRANSACTION_SIZE_PROPERTY_TESTS(MosaicDefinition)
-
-	// endregion
-
-	// region data pointers
-
-	namespace {
-		struct MosaicDefinitionTransactionTraits {
-			static auto GenerateEntityWithAttachments(uint8_t propertiesCount) {
-				uint32_t entitySize = sizeof(MosaicDefinitionTransaction) + propertiesCount * sizeof(MosaicProperty);
-				auto pTransaction = utils::MakeUniqueWithSize<MosaicDefinitionTransaction>(entitySize);
-				pTransaction->Size = entitySize;
-				pTransaction->PropertiesHeader.Count = propertiesCount;
-				return pTransaction;
-			}
-
-			template<typename TEntity>
-			static auto GetAttachmentPointer(TEntity& entity) {
-				return entity.PropertiesPtr();
-			}
-		};
-	}
-
-	DEFINE_ATTACHMENT_POINTER_TESTS(TEST_CLASS, MosaicDefinitionTransactionTraits)
 
 	// endregion
 
@@ -91,29 +76,12 @@ namespace catapult { namespace model {
 		// Arrange:
 		MosaicDefinitionTransaction transaction;
 		transaction.Size = 0;
-		transaction.PropertiesHeader.Count = 33;
 
 		// Act:
 		auto realSize = MosaicDefinitionTransaction::CalculateRealSize(transaction);
 
 		// Assert:
-		EXPECT_EQ(9u, sizeof(MosaicProperty));
-		EXPECT_EQ(sizeof(MosaicDefinitionTransaction) + 33 * sizeof(MosaicProperty), realSize);
-	}
-
-	TEST(TEST_CLASS, CalculateRealSizeDoesNotOverflowWithMaxValues) {
-		// Arrange:
-		MosaicDefinitionTransaction transaction;
-		test::SetMaxValue(transaction.Size);
-		test::SetMaxValue(transaction.PropertiesHeader.Count);
-
-		// Act:
-		auto realSize = MosaicDefinitionTransaction::CalculateRealSize(transaction);
-
-		// Assert:
-		ASSERT_EQ(0xFFFFFFFF, transaction.Size);
-		EXPECT_EQ(sizeof(MosaicDefinitionTransaction) + 0xFF * sizeof(MosaicProperty), realSize);
-		EXPECT_GT(0xFFFFFFFF, realSize);
+		EXPECT_EQ(sizeof(MosaicDefinitionTransaction), realSize);
 	}
 
 	// endregion

@@ -25,7 +25,7 @@
 
 namespace catapult { namespace tree {
 
-	/// A base patricia tree.
+	/// Base patricia tree.
 	template<typename TEncoder, typename TDataSource, typename THasher = std::hash<typename TEncoder::KeyType>>
 	class BasePatriciaTree {
 	public:
@@ -34,13 +34,13 @@ namespace catapult { namespace tree {
 		using DeltaType = BasePatriciaTreeDelta<TEncoder, TDataSource, THasher>;
 
 	public:
-		/// Creates a tree around a \a dataSource.
+		/// Creates a tree around \a dataSource.
 		explicit BasePatriciaTree(TDataSource& dataSource)
 				: m_dataSource(dataSource)
 				, m_tree(m_dataSource)
 		{}
 
-		/// Creates a tree around a \a dataSource with specified root hash (\a rootHash).
+		/// Creates a tree around \a dataSource with specified root hash (\a rootHash).
 		BasePatriciaTree(TDataSource& dataSource, const Hash256& rootHash) : BasePatriciaTree(dataSource) {
 			if (!m_tree.tryLoad(rootHash))
 				CATAPULT_THROW_RUNTIME_ERROR_1("unable to load tree with root hash", rootHash);
@@ -58,7 +58,7 @@ namespace catapult { namespace tree {
 		}
 
 	public:
-		/// Returns a delta based on the same data source as this tree.
+		/// Gets a delta based on the same data source as this tree.
 		std::shared_ptr<DeltaType> rebase() {
 			if (m_pWeakDelta.lock())
 				CATAPULT_THROW_RUNTIME_ERROR("only a single attached delta is allowed at a time");
@@ -68,7 +68,7 @@ namespace catapult { namespace tree {
 			return pDelta;
 		}
 
-		/// Returns a delta based on the same data source as this tree
+		/// Gets a delta based on the same data source as this tree
 		/// but without the ability to commit any changes to the original tree.
 		std::shared_ptr<DeltaType> rebaseDetached() const {
 			return std::make_shared<DeltaType>(m_dataSource, root());

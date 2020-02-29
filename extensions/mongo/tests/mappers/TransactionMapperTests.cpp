@@ -48,7 +48,7 @@ namespace catapult { namespace mongo { namespace mappers {
 			auto pTransaction = std::make_unique<ArbitraryTransaction>();
 			pTransaction->Size = sizeof(ArbitraryTransaction);
 			pTransaction->Type = Arbitrary_Transaction_Type;
-			test::FillWithRandomData(pTransaction->Signer);
+			test::FillWithRandomData(pTransaction->SignerPublicKey);
 			test::FillWithRandomData(pTransaction->Signature);
 			return pTransaction;
 		}
@@ -91,7 +91,7 @@ namespace catapult { namespace mongo { namespace mappers {
 				return {
 					CreateSingleValueDocument("sum", arbitraryTransaction.Alpha + arbitraryTransaction.Zeta),
 					CreateSingleValueDocument("diff", arbitraryTransaction.Zeta - arbitraryTransaction.Alpha),
-					CreateSingleValueDocument("prod", arbitraryTransaction.Alpha * arbitraryTransaction.Zeta),
+					CreateSingleValueDocument("prod", arbitraryTransaction.Alpha * arbitraryTransaction.Zeta)
 				};
 			}
 
@@ -131,7 +131,7 @@ namespace catapult { namespace mongo { namespace mappers {
 			test::AssertEqualTransactionMetadata(metadata, metaView);
 
 			auto transactionView = view["transaction"].get_document().view();
-			EXPECT_EQ(6u + numExpectedAdditionalFields, test::GetFieldCount(transactionView));
+			EXPECT_EQ(7u + numExpectedAdditionalFields, test::GetFieldCount(transactionView));
 			test::AssertEqualTransactionData(transaction, transactionView);
 			assertAdditionalFields(transactionView);
 		}
@@ -176,7 +176,8 @@ namespace catapult { namespace mongo { namespace mappers {
 
 		// Assert:
 		AssertCanMapTransaction(registry, 1, [](const auto& dbTransaction) {
-			EXPECT_EQ("1200000065000000", test::ToHexString(test::GetBinary(dbTransaction, "bin"), 8));
+			auto expectedBinHeader = test::HexStringToVector("1200000065000000");
+			EXPECT_EQ_MEMORY(&expectedBinHeader[0], test::GetBinary(dbTransaction, "bin"), 8);
 		});
 	}
 

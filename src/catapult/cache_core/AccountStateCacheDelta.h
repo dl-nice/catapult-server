@@ -101,6 +101,9 @@ namespace catapult { namespace cache {
 		/// Gets the minimum harvester balance.
 		Amount minHarvesterBalance() const;
 
+		/// Gets the maximum harvester balance.
+		Amount maxHarvesterBalance() const;
+
 		/// Gets the harvesting mosaic id.
 		MosaicId harvestingMosaicId() const;
 
@@ -123,6 +126,12 @@ namespace catapult { namespace cache {
 		/// If \a height matches the height at which account was added, queues removal of account's \a publicKey
 		/// information from the cache.
 		void queueRemove(const Key& publicKey, Height height);
+
+		/// Clears any queued removals for \a address at \a height
+		void clearRemove(const Address& address, Height height);
+
+		/// Clears any queued removals for \a publicKey at \a height.
+		void clearRemove(const Key& publicKey, Height height);
 
 		/// Commits all queued removals.
 		void commitRemovals();

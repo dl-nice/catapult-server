@@ -22,11 +22,11 @@
 #include "catapult/crypto/Hashes.h"
 #include "catapult/crypto/Signer.h"
 #include "catapult/ionet/PacketPayloadFactory.h"
-#include "tests/test/core/AddressTestUtils.h"
 #include "tests/test/core/EntityTestUtils.h"
 #include "tests/test/core/PacketIoTestUtils.h"
 #include "tests/test/core/PacketTestUtils.h"
 #include "tests/test/core/mocks/MockPacketIo.h"
+#include "tests/test/nodeps/KeyTestUtils.h"
 #include "tests/TestHarness.h"
 
 namespace catapult { namespace ionet {
@@ -124,7 +124,7 @@ namespace catapult { namespace ionet {
 		auto entities = std::vector<std::shared_ptr<model::VerifiableEntity>>{
 			test::CreateRandomEntityWithSize<>(126),
 			test::CreateRandomEntityWithSize<>(212),
-			test::CreateRandomEntityWithSize<>(134),
+			test::CreateRandomEntityWithSize<>(134)
 		};
 
 		// Act:
@@ -226,21 +226,6 @@ namespace catapult { namespace ionet {
 			return pPacket;
 		}
 
-		struct ReadCallbackParams {
-			bool IsPacketValid;
-			SocketOperationCode ReadCode;
-			std::vector<uint8_t> ReadPacketBytes;
-		};
-
-		PacketIo::ReadCallback CreateReadCaptureCallback(ReadCallbackParams& capture) {
-			return [&capture](auto code, const auto* pReadPacket) {
-				capture.ReadCode = code;
-				capture.IsPacketValid = !!pReadPacket;
-				if (capture.IsPacketValid)
-					capture.ReadPacketBytes = test::CopyPacketToBuffer(*pReadPacket);
-			};
-		}
-
 		struct PacketIoReadTraits {
 			static void Read(const TestContext& context, const PacketIo::ReadCallback& callback) {
 				context.pSecureIo->read(callback);
@@ -266,8 +251,8 @@ namespace catapult { namespace ionet {
 		context.pMockPacketIo->queueRead(SocketOperationCode::Read_Error, nullptr);
 
 		// Act:
-		ReadCallbackParams capture;
-		TTraits::Read(context, CreateReadCaptureCallback(capture));
+		test::PacketIoReadCallbackParams capture;
+		TTraits::Read(context, test::CreateReadCaptureCallback(capture));
 
 		// Assert:
 		EXPECT_EQ(SocketOperationCode::Read_Error, capture.ReadCode);
@@ -290,8 +275,8 @@ namespace catapult { namespace ionet {
 			context.pMockPacketIo->queueRead(SocketOperationCode::Success, [pPacket](const auto*) { return pPacket; });
 
 			// Act:
-			ReadCallbackParams capture;
-			TReadTraits::Read(context, CreateReadCaptureCallback(capture));
+			test::PacketIoReadCallbackParams capture;
+			TReadTraits::Read(context, test::CreateReadCaptureCallback(capture));
 
 			// Assert:
 			EXPECT_EQ(expectedReadCode, capture.ReadCode);
@@ -343,8 +328,8 @@ namespace catapult { namespace ionet {
 			context.pMockPacketIo->queueRead(SocketOperationCode::Success, [pPacket](const auto*) { return pPacket; });
 
 			// Act:
-			ReadCallbackParams capture;
-			TReadTraits::Read(context, CreateReadCaptureCallback(capture));
+			test::PacketIoReadCallbackParams capture;
+			TReadTraits::Read(context, test::CreateReadCaptureCallback(capture));
 
 			// Assert:
 			ASSERT_EQ(SocketOperationCode::Success, capture.ReadCode);
@@ -406,12 +391,8 @@ namespace catapult { namespace ionet {
 		context.pMockPacketIo->queueRead(SocketOperationCode::Success, [pPacket2](const auto*) { return pPacket2; });
 
 		// Act:
-		std::vector<ReadCallbackParams> captures;
-		context.pSecureBatchReader->readMultiple([&captures](auto code, const auto* pReadPacket) {
-			ReadCallbackParams capture;
-			CreateReadCaptureCallback(capture)(code, pReadPacket);
-			captures.push_back(capture);
-		});
+		std::vector<test::PacketIoReadCallbackParams> captures;
+		context.pSecureBatchReader->readMultiple(test::CreateReadCaptureCallback(captures));
 
 		// Assert: both packets were read
 		ASSERT_EQ(2u, captures.size());

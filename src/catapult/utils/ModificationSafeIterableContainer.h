@@ -37,27 +37,27 @@ namespace catapult { namespace utils {
 		}
 
 		/// Gets a value indicating whether or not the container is empty.
-		bool empty () const {
+		bool empty() const {
 			return m_container.empty();
 		}
 
 	public:
-		/// Returns a const iterator that represents the first entity.
+		/// Gets a const iterator that represents the first entity.
 		auto cbegin() const {
 			return m_container.cbegin();
 		}
 
-		/// Returns a const iterator that represents one past the last entity.
+		/// Gets a const iterator that represents one past the last entity.
 		auto cend() const {
 			return m_container.cend();
 		}
 
-		/// Returns an iterator that represents the first entity.
+		/// Gets an iterator that represents the first entity.
 		auto begin() {
 			return m_container.begin();
 		}
 
-		/// Returns an iterator that represents one past the last entity.
+		/// Gets an iterator that represents one past the last entity.
 		auto end() {
 			return m_container.end();
 		}

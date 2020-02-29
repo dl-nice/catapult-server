@@ -56,7 +56,7 @@ namespace catapult { namespace mongo {
 		public:
 			void notifyStatus(const model::Transaction& transaction, const Hash256& hash, uint32_t status) override {
 				utils::SpinLockGuard guard(m_lock);
-				m_transactionStatuses.emplace_back(hash, status, transaction.Deadline);
+				m_transactionStatuses.emplace_back(hash, transaction.Deadline, status);
 			}
 
 			void flush() override {
@@ -74,7 +74,7 @@ namespace catapult { namespace mongo {
 						Collection_Name,
 						transactionStatuses,
 						[](const auto& status, auto) { return mappers::ToDbModel(status); },
-						CreateFilter("hash")).get();
+						CreateFilter("status.hash")).get();
 				auto aggregateUpsert = BulkWriteResult::Aggregate(thread::get_all(std::move(results)));
 				m_errorPolicy.checkUpserted(transactionStatuses.size(), aggregateUpsert, "transaction statuses");
 			}

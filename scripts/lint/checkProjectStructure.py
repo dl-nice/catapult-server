@@ -80,9 +80,13 @@ class CheckResult(Enum):
     Empty = 4
 
 
+def isExternalInclude(inc):
+    return inc.startswith('<donna') or inc.startswith('<openssl')
+
+
 def checkExternalInclude(incA, incB):
-    extA = incA.startswith('<ref10') or incA.startswith('<ripemd160') or incA.startswith('<sha3')
-    extB = incB.startswith('<ref10') or incB.startswith('<ripemd160') or incB.startswith('<sha3')
+    extA = isExternalInclude(incA)
+    extB = isExternalInclude(incB)
 
     if extA and not extB:
         return True
@@ -94,7 +98,7 @@ def checkExternalInclude(incA, incB):
 
 
 def isCppInclude(inc):
-    cppIncludes = ['<boost', '<mongocxx', '<bsoncxx', '<rocksdb', '<benchmark', '<tiny-aes-c']
+    cppIncludes = ['<boost', '<mongocxx', '<bsoncxx', '<rocksdb', '<benchmark']
     return any(map(inc.startswith, cppIncludes))
 
 
@@ -153,13 +157,6 @@ class SortableInclude(HeaderParser.Include):
     def __init__(self, inc, ruleset):
         super().__init__(inc.line, inc.lineno, inc.include, inc.rest)
         self.ruleset = ruleset
-
-    @staticmethod
-    def isLibraryInclude(name):
-        for libraryName in ['<ref10', '<ripemd160', '<sha3', '<boost']:
-            if name.startswith(libraryName):
-                return True
-        return False
 
     def comparePaths(self, other):
         incA = self.include

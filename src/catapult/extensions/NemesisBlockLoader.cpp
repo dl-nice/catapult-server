@@ -28,6 +28,7 @@
 #include "catapult/config/CatapultConfiguration.h"
 #include "catapult/crypto/Signer.h"
 #include "catapult/io/BlockStorageCache.h"
+#include "catapult/model/BlockUtils.h"
 #include "catapult/model/NotificationPublisher.h"
 #include "catapult/model/TransactionPlugin.h"
 #include "catapult/observers/NotificationObserverAdapter.h"
@@ -48,12 +49,12 @@ namespace catapult { namespace extensions {
 		}
 
 		void LogNemesisBlockInfo(const model::BlockElement& blockElement) {
-			auto networkId = blockElement.Block.Network();
-			const auto& publicKey = blockElement.Block.Signer;
+			auto networkIdentifier = blockElement.Block.Network;
+			const auto& publicKey = blockElement.Block.SignerPublicKey;
 			const auto& generationHash = blockElement.GenerationHash;
 			CATAPULT_LOG(info)
 					<< std::endl
-					<< "      nemesis network id: " << networkId << std::endl
+					<< "      nemesis network id: " << networkIdentifier << std::endl
 					<< "      nemesis public key: " << publicKey << std::endl
 					<< " nemesis generation hash: " << generationHash;
 		}
@@ -77,12 +78,12 @@ namespace catapult { namespace extensions {
 		}
 
 		void CheckNemesisBlockInfo(const model::BlockElement& blockElement, const model::NetworkInfo& expectedNetwork) {
-			auto networkId = blockElement.Block.Network();
-			const auto& publicKey = blockElement.Block.Signer;
+			auto networkIdentifier = blockElement.Block.Network;
+			const auto& publicKey = blockElement.Block.SignerPublicKey;
 			const auto& generationHash = blockElement.GenerationHash;
 
-			if (expectedNetwork.Identifier != networkId)
-				CATAPULT_THROW_INVALID_ARGUMENT_1("nemesis network id does not match network", networkId);
+			if (expectedNetwork.Identifier != networkIdentifier)
+				CATAPULT_THROW_INVALID_ARGUMENT_1("nemesis network id does not match network", networkIdentifier);
 
 			if (expectedNetwork.PublicKey != publicKey)
 				CATAPULT_THROW_INVALID_ARGUMENT_1("nemesis public key does not match network", publicKey);
@@ -155,7 +156,7 @@ namespace catapult { namespace extensions {
 		auto pNemesisBlockElement = storageView.loadBlockElement(Height(1));
 
 		// 2. execute the nemesis block
-		execute(stateRef.Config.BlockChain, *pNemesisBlockElement, stateRef.State, stateHashVerification, Verbosity::On);
+		execute(stateRef.Config.BlockChain, *pNemesisBlockElement, stateHashVerification, Verbosity::On);
 	}
 
 	void NemesisBlockLoader::executeAndCommit(const LocalNodeStateRef& stateRef, StateHashVerification stateHashVerification) {
@@ -167,8 +168,7 @@ namespace catapult { namespace extensions {
 	}
 
 	void NemesisBlockLoader::execute(const model::BlockChainConfiguration& config, const model::BlockElement& nemesisBlockElement) {
-		auto catapultState = state::CatapultState();
-		execute(config, nemesisBlockElement, catapultState, StateHashVerification::Enabled, Verbosity::Off);
+		execute(config, nemesisBlockElement, StateHashVerification::Enabled, Verbosity::Off);
 	}
 
 	namespace {
@@ -184,19 +184,14 @@ namespace catapult { namespace extensions {
 		}
 
 		void RequireValidSignature(const model::Block& block) {
-			auto headerSize = model::VerifiableEntity::Header_Size;
-			auto blockData = RawBuffer{ reinterpret_cast<const uint8_t*>(&block) + headerSize, sizeof(model::BlockHeader) - headerSize };
-			if (crypto::Verify(block.Signer, blockData, block.Signature))
-				return;
-
-			CATAPULT_THROW_RUNTIME_ERROR("nemesis block has invalid signature");
+			if (!model::VerifyBlockHeaderSignature(block))
+				CATAPULT_THROW_RUNTIME_ERROR("nemesis block has invalid signature");
 		}
 	}
 
 	void NemesisBlockLoader::execute(
 			const model::BlockChainConfiguration& config,
 			const model::BlockElement& nemesisBlockElement,
-			state::CatapultState& catapultState,
 			StateHashVerification stateHashVerification,
 			Verbosity verbosity) {
 		// 1. check the nemesis block
@@ -208,16 +203,16 @@ namespace catapult { namespace extensions {
 		CheckNemesisBlockFeeMultiplier(nemesisBlockElement.Block);
 
 		// 2. reset nemesis funding observer data
-		m_nemesisPublicKey = nemesisBlockElement.Block.Signer;
+		m_nemesisPublicKey = nemesisBlockElement.Block.SignerPublicKey;
 		m_nemesisFundingState = NemesisFundingState();
 
 		// 3. execute the block
 		auto readOnlyCache = m_cacheDelta.toReadOnly();
 		auto resolverContext = m_pluginManager.createResolverContext(readOnlyCache);
 		auto blockStatementBuilder = model::BlockStatementBuilder();
-		auto observerState = config.ShouldEnableVerifiableReceipts
-				? observers::ObserverState(m_cacheDelta, catapultState, blockStatementBuilder)
-				: observers::ObserverState(m_cacheDelta, catapultState);
+		auto observerState = config.EnableVerifiableReceipts
+				? observers::ObserverState(m_cacheDelta, blockStatementBuilder)
+				: observers::ObserverState(m_cacheDelta);
 		chain::ExecuteBlock(nemesisBlockElement, { *m_pObserver, resolverContext, observerState });
 
 		// 4. check the funded balances are reasonable
@@ -235,8 +230,8 @@ namespace catapult { namespace extensions {
 		CheckMaxMosaicAtomicUnits(m_nemesisFundingState.TotalFundedMosaics, config.MaxMosaicAtomicUnits);
 
 		// 5. check the hashes
-		auto blockReceiptsHash = model::CalculateMerkleHash(*blockStatementBuilder.build());
-		RequireHashMatch("receipts", nemesisBlockElement.Block.BlockReceiptsHash, blockReceiptsHash);
+		auto calculatedReceiptsHash = model::CalculateMerkleHash(*blockStatementBuilder.build());
+		RequireHashMatch("receipts", nemesisBlockElement.Block.ReceiptsHash, calculatedReceiptsHash);
 
 		// important: do not remove calculateStateHash call because it has important side-effect of populating the patricia tree delta
 		auto cacheStateHash = m_cacheDelta.calculateStateHash(Height(1)).StateHash;

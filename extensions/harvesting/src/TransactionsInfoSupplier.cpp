@@ -116,7 +116,7 @@ namespace catapult { namespace harvesting {
 
 	TransactionsInfoSupplier CreateTransactionsInfoSupplier(
 			model::TransactionSelectionStrategy strategy,
-			const cache::MemoryUtCache& utCache) {
+			const cache::ReadWriteUtCache& utCache) {
 		return [strategy, &utCache](auto& utFacade, auto count) {
 			auto utCacheView = utCache.view();
 
@@ -129,7 +129,7 @@ namespace catapult { namespace harvesting {
 
 			default:
 				return SupplyOldest(utCacheView, utFacade, count);
-			};
+			}
 		};
 	}
 }}

@@ -30,9 +30,12 @@ namespace catapult { namespace mongo { namespace plugins {
 
 	namespace {
 		void StreamAccountRestriction(bson_stream::array_context& context, const state::AccountRestriction& restriction) {
+			if (restriction.values().empty())
+				return;
+
 			auto keyContext = context
 					<< bson_stream::open_document
-					<< "restrictionType" << static_cast<int32_t>(restriction.descriptor().raw());
+					<< "restrictionFlags" << static_cast<int32_t>(restriction.descriptor().raw());
 
 			auto valueArray = keyContext << "values" << bson_stream::open_array;
 			for (const auto& value : restriction.values())
@@ -47,7 +50,7 @@ namespace catapult { namespace mongo { namespace plugins {
 		bson_stream::document builder;
 		auto doc = builder
 				<< "accountRestrictions" << bson_stream::open_document
-				<< "address" << ToBinary(restrictions.address());
+					<< "address" << ToBinary(restrictions.address());
 
 		auto restrictionArray = builder << "restrictions" << bson_stream::open_array;
 		for (const auto& pair : restrictions)

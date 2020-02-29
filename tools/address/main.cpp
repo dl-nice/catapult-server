@@ -19,44 +19,18 @@
 **/
 
 #include "tools/ToolMain.h"
-#include "tools/Random.h"
 #include "catapult/crypto/KeyPair.h"
 #include "catapult/crypto/KeyUtils.h"
 #include "catapult/model/Address.h"
 #include "catapult/utils/Logging.h"
+#include "catapult/utils/RandomGenerator.h"
 #include "catapult/exceptions.h"
 #include <iostream>
-#include <random>
 #include <string>
 
 namespace catapult { namespace tools { namespace address {
 
 	namespace {
-		// region entropy sources
-
-		class LowEntropySource {
-		public:
-			uint8_t operator()() {
-				return RandomByte();
-			}
-		};
-
-		class HighEntropySource {
-		public:
-			HighEntropySource() : m_pRd(std::make_shared<std::random_device>())
-			{}
-
-		public:
-			uint8_t operator()() {
-				return static_cast<uint8_t>((*m_pRd)());
-			}
-
-		private:
-			std::shared_ptr<std::random_device> m_pRd; // shared_ptr because entropy source needs to be copyable
-		};
-
-		// endregion
-
 		class AddressTool : public Tool {
 		public:
 			std::string name() const override {
@@ -65,7 +39,7 @@ namespace catapult { namespace tools { namespace address {
 
 			void prepareOptions(OptionsBuilder& optionsBuilder, OptionsPositional&) override {
 				optionsBuilder("generate,g",
-						OptionsValue<uint32_t>(m_numRandomKeys)->default_value(10),
+						OptionsValue<uint32_t>(m_numRandomKeys)->default_value(3),
 						"number of random keys to generate");
 				optionsBuilder("public,p",
 						OptionsValue<std::string>(m_publicKey),
@@ -74,55 +48,58 @@ namespace catapult { namespace tools { namespace address {
 						OptionsValue<std::string>(m_secretKey),
 						"show address and public key associated with private key");
 				optionsBuilder("network,n",
-						OptionsValue<std::string>(m_networkName)->default_value("public"),
-						"network, possible values: mijin, mijin-test, public (default), public-test");
-
-				optionsBuilder("useHighEntropySource,e",
+						OptionsValue<std::string>(m_networkName)->default_value("mijin"),
+						"network, possible values: mijin (default), mijin-test, public, public-test");
+				optionsBuilder("useLowEntropySource,w",
 						OptionsSwitch(),
-						"true if a high entropy source should be used for randomness");
+						"true if a low entropy source should be used for randomness (unsafe)");
 			}
 
 			int run(const Options& options) override {
-				model::NetworkIdentifier networkId;
-				if (!model::TryParseValue(m_networkName, networkId))
+				model::NetworkIdentifier networkIdentifier;
+				if (!model::TryParseValue(m_networkName, networkIdentifier))
 					CATAPULT_THROW_INVALID_ARGUMENT_1("unknown network", m_networkName);
 
 				if (!m_publicKey.empty()) {
-					output(networkId, crypto::ParseKey(m_publicKey));
+					output(networkIdentifier, crypto::ParseKey(m_publicKey));
 					return 0;
 				}
 
 				if (!m_secretKey.empty()) {
-					output(networkId, crypto::KeyPair::FromString(m_secretKey));
+					output(networkIdentifier, crypto::KeyPair::FromString(m_secretKey));
 					return 0;
 				}
 
-				auto generator = options["useHighEntropySource"].as<bool>()
-						? supplier<uint8_t>(HighEntropySource())
-						: supplier<uint8_t>(LowEntropySource());
-				generateKeys(networkId, generator);
+				if (options["useLowEntropySource"].as<bool>())
+					generateKeys(networkIdentifier, utils::LowEntropyRandomGenerator());
+				else
+					generateKeys(networkIdentifier, utils::HighEntropyRandomGenerator());
+
 				return 0;
 			}
 
 		private:
-			void output(model::NetworkIdentifier networkId, const crypto::KeyPair& keyPair) {
+			void output(model::NetworkIdentifier networkIdentifier, const crypto::KeyPair& keyPair) {
 				std::cout << std::setw(Label_Width) << "private key: " << crypto::FormatKey(keyPair.privateKey()) << std::endl;
-				output(networkId, keyPair.publicKey());
+				output(networkIdentifier, keyPair.publicKey());
 			}
 
-			void output(model::NetworkIdentifier networkId, const Key& publicKey) {
+			void output(model::NetworkIdentifier networkIdentifier, const Key& publicKey) {
 				std::cout
 						<< std::setw(Label_Width) << "public key: " << crypto::FormatKey(publicKey) << std::endl
 						<< std::setw(Label_Width - static_cast<int>(m_networkName.size()) - 3)
 								<< "address (" << m_networkName << "): "
-								<< model::AddressToString(model::PublicKeyToAddress(publicKey, networkId)) << std::endl;
+								<< model::AddressToString(model::PublicKeyToAddress(publicKey, networkIdentifier)) << std::endl;
 			}
 
-			void generateKeys(model::NetworkIdentifier networkId, const supplier<uint8_t>& generator) {
+			template<typename TGenerator>
+			void generateKeys(model::NetworkIdentifier networkIdentifier, TGenerator&& generator) {
 				std::cout << "--- generating " << m_numRandomKeys << " keys ---" << std::endl;
 
 				for (auto i = 0u; i < m_numRandomKeys; ++i) {
-					output(networkId, crypto::KeyPair::FromPrivate(crypto::PrivateKey::Generate(generator)));
+					output(networkIdentifier, crypto::KeyPair::FromPrivate(crypto::PrivateKey::Generate([&generator]() {
+						return static_cast<uint8_t>(generator());
+					})));
 					std::cout << std::endl;
 				}
 			}

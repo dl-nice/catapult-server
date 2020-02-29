@@ -24,7 +24,7 @@
 #include "RollbackInfo.h"
 #include "catapult/cache/ReadOnlyCatapultCache.h"
 #include "catapult/cache_core/AccountStateCache.h"
-#include "catapult/cache_core/BlockDifficultyCache.h"
+#include "catapult/cache_core/BlockStatisticCache.h"
 #include "catapult/cache_core/ImportanceView.h"
 #include "catapult/cache_tx/MemoryUtCache.h"
 #include "catapult/chain/BlockExecutor.h"
@@ -39,6 +39,7 @@
 #include "catapult/consumers/TransactionConsumers.h"
 #include "catapult/consumers/UndoBlock.h"
 #include "catapult/disruptor/BatchRangeDispatcher.h"
+#include "catapult/extensions/CommitStepHandler.h"
 #include "catapult/extensions/DispatcherUtils.h"
 #include "catapult/extensions/ExecutionConfigurationFactory.h"
 #include "catapult/extensions/LocalNodeChainScore.h"
@@ -53,7 +54,7 @@
 #include "catapult/subscribers/StateChangeSubscriber.h"
 #include "catapult/subscribers/TransactionStatusSubscriber.h"
 #include "catapult/thread/MultiServicePool.h"
-#include "catapult/validators/AggregateEntityValidator.h"
+#include "catapult/utils/RandomGenerator.h"
 #include <boost/filesystem.hpp>
 
 using namespace catapult::consumers;
@@ -64,17 +65,31 @@ namespace catapult { namespace sync {
 	namespace {
 		// region utils
 
+		crypto::RandomFiller CreateRandomFiller(const std::string& token) {
+			return [token](auto* pOut, auto count) {
+				utils::HighEntropyRandomGenerator(token).fill(pOut, count);
+			};
+		}
+
+		std::shared_ptr<const validators::ParallelValidationPolicy> CreateParallelValidationPolicy(
+				const std::shared_ptr<thread::IoThreadPool>& pValidatorPool,
+				const plugins::PluginManager& pluginManager) {
+			return validators::CreateParallelValidationPolicy(
+					pValidatorPool,
+					extensions::CreateStatelessEntityValidator(pluginManager, model::SignatureNotification::Notification_Type));
+		}
+
 		ConsumerDispatcherOptions CreateBlockConsumerDispatcherOptions(const config::NodeConfiguration& config) {
 			auto options = ConsumerDispatcherOptions("block dispatcher", config.BlockDisruptorSize);
 			options.ElementTraceInterval = config.BlockElementTraceInterval;
-			options.ShouldThrowWhenFull = config.ShouldAbortWhenDispatcherIsFull;
+			options.ShouldThrowWhenFull = config.EnableDispatcherAbortWhenFull;
 			return options;
 		}
 
 		ConsumerDispatcherOptions CreateTransactionConsumerDispatcherOptions(const config::NodeConfiguration& config) {
 			auto options = ConsumerDispatcherOptions("transaction dispatcher", config.TransactionDisruptorSize);
 			options.ElementTraceInterval = config.TransactionElementTraceInterval;
-			options.ShouldThrowWhenFull = config.ShouldAbortWhenDispatcherIsFull;
+			options.ShouldThrowWhenFull = config.EnableDispatcherAbortWhenFull;
 			return options;
 		}
 
@@ -84,18 +99,30 @@ namespace catapult { namespace sync {
 				std::vector<DisruptorConsumer>&& disruptorConsumers) {
 			auto& statusSubscriber = state.transactionStatusSubscriber();
 			auto reclaimMemoryInspector = CreateReclaimMemoryInspector();
-			auto inspector = [&statusSubscriber, &nodes = state.nodes(), reclaimMemoryInspector](
+			const auto& localNetworks = state.config().Node.LocalNetworks;
+			auto inspector = [&statusSubscriber, &nodes = state.nodes(), &localNetworks, reclaimMemoryInspector](
 					auto& input,
 					const auto& completionResult) {
 				statusSubscriber.flush();
-				auto interactionResult = consumers::ToNodeInteractionResult(input.sourcePublicKey(), completionResult);
+				auto interactionResult = consumers::ToNodeInteractionResult(input.sourceIdentity(), completionResult);
 				extensions::IncrementNodeInteraction(nodes, interactionResult);
+
+				auto nodesModifier = nodes.modifier();
+				nodesModifier.pruneBannedNodes();
+				const auto& identity = input.sourceIdentity();
+				if (ConsumerResultSeverity::Fatal == completionResult.ResultSeverity) {
+					if (config::IsLocalHost(identity.Host, localNetworks))
+						CATAPULT_LOG(debug) << "bypassing banning of " << identity << " because host is contained in local networks";
+					else
+						nodesModifier.ban(identity, completionResult.CompletionCode);
+				}
+
 				reclaimMemoryInspector(input, completionResult);
 			};
 
 			// if enabled, add an audit consumer before all other consumers
 			const auto& config = state.config();
-			if (config.Node.ShouldAuditDispatcherInputs) {
+			if (config.Node.EnableDispatcherInputAuditing) {
 				auto auditPath = boost::filesystem::path(config.User.DataDirectory) / "audit" / std::string(options.DispatcherName);
 				auditPath /= std::to_string(state.timeSupplier()().unwrap());
 				CATAPULT_LOG(debug) << "enabling auditing to " << auditPath;
@@ -112,7 +139,7 @@ namespace catapult { namespace sync {
 		// region block
 
 		ReceiptValidationMode GetReceiptValidationMode(const model::BlockChainConfiguration& blockChainConfig) {
-			return blockChainConfig.ShouldEnableVerifiableReceipts ? ReceiptValidationMode::Enabled : ReceiptValidationMode::Disabled;
+			return blockChainConfig.EnableVerifiableReceipts ? ReceiptValidationMode::Enabled : ReceiptValidationMode::Disabled;
 		}
 
 		BlockChainProcessor CreateSyncProcessor(
@@ -136,8 +163,8 @@ namespace catapult { namespace sync {
 
 			BlockChainSyncHandlers syncHandlers;
 			syncHandlers.DifficultyChecker = [&rollbackInfo, blockChainConfig](const auto& blocks, const cache::CatapultCache& cache) {
-				auto result = chain::CheckDifficulties(cache.sub<cache::BlockDifficultyCache>(), blocks, blockChainConfig);
-				rollbackInfo.reset();
+				auto result = chain::CheckDifficulties(cache.sub<cache::BlockStatisticCache>(), blocks, blockChainConfig);
+				rollbackInfo.modifier().reset();
 				return blocks.size() == result;
 			};
 
@@ -146,7 +173,7 @@ namespace catapult { namespace sync {
 					const auto& blockElement,
 					auto& observerState,
 					auto undoBlockType) {
-				rollbackInfo.increment();
+				rollbackInfo.modifier().increment();
 				auto readOnlyCache = observerState.Cache.toReadOnly();
 				auto resolverContext = pluginManager.createResolverContext(readOnlyCache);
 				UndoBlock(blockElement, { *pUndoObserver, resolverContext, observerState }, undoBlockType);
@@ -161,15 +188,15 @@ namespace catapult { namespace sync {
 				subscriber.notifyScoreChange(localScore.get());
 				subscriber.notifyStateChange(changeInfo);
 
-				rollbackInfo.save();
+				rollbackInfo.modifier().save();
 			};
 
 			auto dataDirectory = config::CatapultDataDirectory(state.config().User.DataDirectory);
-			syncHandlers.PreStateWritten = [](const auto&, const auto&, auto) {};
+			syncHandlers.PreStateWritten = [](const auto&, auto) {};
 			syncHandlers.TransactionsChange = state.hooks().transactionsChangeHandler();
-			syncHandlers.CommitStep = CreateCommitStepHandler(dataDirectory);
+			syncHandlers.CommitStep = extensions::CreateCommitStepHandler(dataDirectory);
 
-			if (state.config().Node.ShouldUseCacheDatabaseStorage)
+			if (state.config().Node.EnableCacheDatabaseStorage)
 				AddSupplementalDataResiliency(syncHandlers, dataDirectory, state.cache(), state.score());
 
 			return syncHandlers;
@@ -195,27 +222,37 @@ namespace catapult { namespace sync {
 			std::shared_ptr<ConsumerDispatcher> build(
 					const std::shared_ptr<thread::IoThreadPool>& pValidatorPool,
 					RollbackInfo& rollbackInfo) {
+				const auto& utCache = const_cast<const extensions::ServiceState&>(m_state).utCache();
+				auto requiresValidationPredicate = ToRequiresValidationPredicate(m_state.hooks().knownHashPredicate(utCache));
 				m_consumers.push_back(CreateBlockChainCheckConsumer(
 						m_nodeConfig.MaxBlocksPerSyncAttempt,
 						m_state.config().BlockChain.MaxBlockFutureTime,
 						m_state.timeSupplier()));
 				m_consumers.push_back(CreateBlockStatelessValidationConsumer(
-						extensions::CreateStatelessValidator(m_state.pluginManager()),
-						validators::CreateParallelValidationPolicy(pValidatorPool),
-						ToRequiresValidationPredicate(m_state.hooks().knownHashPredicate(m_state.utCache()))));
+						CreateParallelValidationPolicy(pValidatorPool, m_state.pluginManager()),
+						requiresValidationPredicate));
+				m_consumers.push_back(CreateBlockBatchSignatureConsumer(
+						m_state.config().BlockChain.Network.GenerationHash,
+						CreateRandomFiller(m_state.config().Node.BatchVerificationRandomSource),
+						m_state.pluginManager().createNotificationPublisher(),
+						pValidatorPool,
+						requiresValidationPredicate));
 
 				auto disruptorConsumers = DisruptorConsumersFromBlockConsumers(m_consumers);
 				disruptorConsumers.push_back(CreateBlockChainSyncConsumer(
 						m_state.cache(),
-						m_state.state(),
 						m_state.storage(),
 						m_state.config().BlockChain.MaxRollbackBlocks,
 						CreateBlockChainSyncHandlers(m_state, rollbackInfo)));
 
-				if (m_state.config().Node.ShouldEnableAutoSyncCleanup)
+				if (m_state.config().Node.EnableAutoSyncCleanup)
 					disruptorConsumers.push_back(CreateBlockChainSyncCleanupConsumer(m_state.config().User.DataDirectory));
 
-				disruptorConsumers.push_back(CreateNewBlockConsumer(m_state.hooks().newBlockSink(), InputSource::Local));
+				// forward locally harvested blocks and blocks pushed by partners
+				auto newBlockSinkSourceMask = static_cast<InputSource>(
+						utils::to_underlying_type(InputSource::Local)
+						| utils::to_underlying_type(InputSource::Remote_Push));
+				disruptorConsumers.push_back(CreateNewBlockConsumer(m_state.hooks().newBlockSink(), newBlockSinkSourceMask));
 				return CreateConsumerDispatcher(
 						m_state,
 						CreateBlockConsumerDispatcherOptions(m_nodeConfig),
@@ -236,15 +273,18 @@ namespace catapult { namespace sync {
 			serviceGroup.registerService(pDispatcher);
 			locator.registerService("dispatcher.block", pDispatcher);
 
-			state.hooks().setBlockRangeConsumerFactory([&dispatcher = *pDispatcher](auto source) {
-				return [&dispatcher, source](auto&& range) {
-					dispatcher.processElement(ConsumerInput(std::move(range), source));
+			state.hooks().setBlockRangeConsumerFactory([&dispatcher = *pDispatcher, &nodes = state.nodes()](auto source) {
+				return [&dispatcher, &nodes, source](auto&& range) {
+					if (!nodes.view().isBanned(range.SourceIdentity))
+						dispatcher.processElement(ConsumerInput(std::move(range), source));
 				};
 			});
 
-			state.hooks().setCompletionAwareBlockRangeConsumerFactory([&dispatcher = *pDispatcher](auto source) {
-				return [&dispatcher, source](auto&& range, const auto& processingComplete) {
-					return dispatcher.processElement(ConsumerInput(std::move(range), source), processingComplete);
+			state.hooks().setCompletionAwareBlockRangeConsumerFactory([&dispatcher = *pDispatcher, &nodes = state.nodes()](auto source) {
+				return [&dispatcher, &nodes, source](auto&& range, const auto& processingComplete) {
+					return disruptor::InputSource::Local == source || !nodes.view().isBanned(range.SourceIdentity)
+							? dispatcher.processElement(ConsumerInput(std::move(range), source), processingComplete)
+							: 0;
 				};
 			});
 		}
@@ -262,22 +302,29 @@ namespace catapult { namespace sync {
 
 		public:
 			void addHashConsumers() {
+				const auto& utCache = const_cast<const extensions::ServiceState&>(m_state).utCache();
 				m_consumers.push_back(CreateTransactionHashCalculatorConsumer(
 						m_state.config().BlockChain.Network.GenerationHash,
 						m_state.pluginManager().transactionRegistry()));
 				m_consumers.push_back(CreateTransactionHashCheckConsumer(
 						m_state.timeSupplier(),
 						extensions::CreateHashCheckOptions(m_nodeConfig.ShortLivedCacheTransactionDuration, m_nodeConfig),
-						m_state.hooks().knownHashPredicate(m_state.utCache())));
+						m_state.hooks().knownHashPredicate(utCache)));
 			}
 
 			std::shared_ptr<ConsumerDispatcher> build(
 					const std::shared_ptr<thread::IoThreadPool>& pValidatorPool,
 					chain::UtUpdater& utUpdater) {
+				auto failedTransactionSink = extensions::SubscriberToSink(m_state.transactionStatusSubscriber());
 				m_consumers.push_back(CreateTransactionStatelessValidationConsumer(
-						extensions::CreateStatelessValidator(m_state.pluginManager()),
-						validators::CreateParallelValidationPolicy(pValidatorPool),
-						extensions::SubscriberToSink(m_state.transactionStatusSubscriber())));
+						CreateParallelValidationPolicy(pValidatorPool, m_state.pluginManager()),
+						failedTransactionSink));
+				m_consumers.push_back(CreateTransactionBatchSignatureConsumer(
+						m_state.config().BlockChain.Network.GenerationHash,
+						CreateRandomFiller(m_state.config().Node.BatchVerificationRandomSource),
+						m_state.pluginManager().createNotificationPublisher(),
+						pValidatorPool,
+						failedTransactionSink));
 
 				auto disruptorConsumers = DisruptorConsumersFromTransactionConsumers(m_consumers);
 				disruptorConsumers.push_back(CreateNewTransactionsConsumer(
@@ -310,12 +357,15 @@ namespace catapult { namespace sync {
 			serviceGroup.registerService(pDispatcher);
 			locator.registerService("dispatcher.transaction", pDispatcher);
 
-			auto pBatchRangeDispatcher = std::make_shared<extensions::TransactionBatchRangeDispatcher>(*pDispatcher);
+			auto pBatchRangeDispatcher = std::make_shared<extensions::TransactionBatchRangeDispatcher>(
+					*pDispatcher,
+					state.config().BlockChain.Network.NodeEqualityStrategy);
 			locator.registerRootedService("dispatcher.transaction.batch", pBatchRangeDispatcher);
 
-			state.hooks().setTransactionRangeConsumerFactory([&dispatcher = *pBatchRangeDispatcher](auto source) {
-				return [&dispatcher, source](auto&& range) {
-					dispatcher.queue(std::move(range), source);
+			state.hooks().setTransactionRangeConsumerFactory([&dispatcher = *pBatchRangeDispatcher, &nodes = state.nodes()](auto source) {
+				return [&dispatcher, &nodes, source](auto&& range) {
+					if (!nodes.view().isBanned(range.SourceIdentity))
+						dispatcher.queue(std::move(range), source);
 				};
 			});
 
@@ -361,7 +411,7 @@ namespace catapult { namespace sync {
 				RollbackCounterType rollbackCounterType) {
 			locator.registerServiceCounter<RollbackInfo>("rollbacks", counterName, [rollbackResult, rollbackCounterType](
 					const auto& rollbackInfo) {
-				return rollbackInfo.counter(rollbackResult, rollbackCounterType);
+				return rollbackInfo.view().counter(rollbackResult, rollbackCounterType);
 			});
 		}
 

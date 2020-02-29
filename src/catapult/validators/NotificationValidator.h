@@ -20,14 +20,17 @@
 
 #pragma once
 #include "ValidationResult.h"
+// ValidatorContext must be included so that stateful validator has proper visibility
+// (all of its template arguments must be visible at point of declaration)
+#include "ValidatorContext.h"
 #include "catapult/model/Notifications.h"
 #include <string>
 
 namespace catapult { namespace validators {
 
-	/// A strongly typed notification validator.
+	/// Strongly typed notification validator.
 	template<typename TNotification, typename... TArgs>
-	class NotificationValidatorT {
+	class PLUGIN_API_DEPENDENCY NotificationValidatorT {
 	public:
 		/// Notification type.
 		using NotificationType = TNotification;

@@ -100,7 +100,7 @@ namespace catapult { namespace utils {
 			stream << "\033[" << foreground << (LogColorMode::AnsiBold == Mode ? ";1" : "") << "m";
 		}
 
-		// The operator is used when putting the severity_level to log with a severity_color manipulator
+		// operator used when putting the severity_level to log with a severity_color manipulator
 		template<LogColorMode Mode>
 		boost::log::formatting_ostream& operator<<(
 				boost::log::formatting_ostream& stream,
@@ -141,7 +141,7 @@ namespace catapult { namespace utils {
 		}
 
 		template<typename T>
-		bool ShouldLog(T&& severity, LogLevel level) {
+		bool ShouldLog(const T& severity, LogLevel level) {
 			return severity >= static_cast<boost::log::trivial::severity_level>(level);
 		}
 

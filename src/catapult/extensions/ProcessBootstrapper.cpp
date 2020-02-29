@@ -26,6 +26,13 @@
 
 namespace catapult { namespace extensions {
 
+#ifdef STRICT_SYMBOL_VISIBILITY
+	template<typename T>
+	void ForceSymbolInjection() {
+		CATAPULT_LOG(debug) << "forcibly injecting symbol: " << typeid(T).name() << " => " << typeid(T).hash_code();
+	}
+#endif
+
 	ProcessBootstrapper::ProcessBootstrapper(
 			const config::CatapultConfiguration& config,
 			const std::string& resourcesPath,
@@ -37,12 +44,16 @@ namespace catapult { namespace extensions {
 			, m_pMultiServicePool(std::make_unique<thread::MultiServicePool>(
 					servicePoolName,
 					thread::MultiServicePool::DefaultPoolConcurrency(),
-					m_config.Node.ShouldUseSingleThreadPool
+					m_config.Node.EnableSingleThreadPool
 							? thread::MultiServicePool::IsolatedPoolMode::Disabled
 							: thread::MultiServicePool::IsolatedPoolMode::Enabled))
 			, m_subscriptionManager(config)
-			, m_pluginManager(m_config.BlockChain, CreateStorageConfiguration(config), m_config.User, m_config.Inflation)
-	{}
+			, m_pluginManager(m_config.BlockChain, CreateStorageConfiguration(config), m_config.User, m_config.Inflation) {
+#ifdef STRICT_SYMBOL_VISIBILITY
+			// need to forcibly inject typeinfos into containing exe so that they are properly resolved across modules
+			ForceSymbolInjection<model::EmbeddedTransactionPlugin>();
+#endif
+	}
 
 	const config::CatapultConfiguration& ProcessBootstrapper::config() const {
 		return m_config;
@@ -77,10 +88,8 @@ namespace catapult { namespace extensions {
 	}
 
 	namespace {
-		using RegisterExtensionFunc = void (*)(ProcessBootstrapper&);
-
 		void LoadExtension(const plugins::PluginModule& module, ProcessBootstrapper& bootstrapper) {
-			auto registerExtension = module.symbol<RegisterExtensionFunc>("RegisterExtension");
+			auto registerExtension = module.symbol<decltype(::RegisterExtension)*>("RegisterExtension");
 
 			try {
 				registerExtension(bootstrapper);
@@ -95,7 +104,16 @@ namespace catapult { namespace extensions {
 
 	void ProcessBootstrapper::loadExtensions() {
 		for (const auto& extension : m_config.Extensions.Names) {
-			m_extensionModules.emplace_back(m_config.User.PluginsDirectory, extension);
+			auto scope = plugins::PluginModule::Scope::Local;
+
+#ifdef STRICT_SYMBOL_VISIBILITY
+			// any extensions that provide additional plugin models need to be imported globally so that their symbols can
+			// be used to resolve usages in their plugins
+			if ("extension.mongo" == extension)
+				scope = plugins::PluginModule::Scope::Global;
+#endif
+
+			m_extensionModules.emplace_back(m_config.User.PluginsDirectory, extension, scope);
 
 			CATAPULT_LOG(info) << "registering dynamic extension " << extension;
 			LoadExtension(m_extensionModules.back(), *this);
@@ -107,7 +125,9 @@ namespace catapult { namespace extensions {
 	}
 
 	void AddStaticNodesFromPath(ProcessBootstrapper& bootstrapper, const std::string& path) {
-		auto nodes = config::LoadPeersFromPath(path, bootstrapper.config().BlockChain.Network.Identifier);
+		const auto& networkInfo = bootstrapper.config().BlockChain.Network;
+		auto networkFingerprint = model::UniqueNetworkFingerprint(networkInfo.Identifier, networkInfo.GenerationHash);
+		auto nodes = config::LoadPeersFromPath(path, networkFingerprint);
 		bootstrapper.addStaticNodes(nodes);
 	}
 }}

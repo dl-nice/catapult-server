@@ -24,6 +24,8 @@
 
 namespace catapult { namespace config {
 
+#define TEST_CLASS NodeConfigurationTests
+
 	namespace {
 		struct NodeConfigurationTraits {
 			using ConfigurationType = NodeConfiguration;
@@ -35,12 +37,14 @@ namespace catapult { namespace config {
 						{
 							{ "port", "1234" },
 							{ "apiPort", "8888" },
-							{ "shouldAllowAddressReuse", "true" },
-							{ "shouldUseSingleThreadPool", "true" },
-							{ "shouldUseCacheDatabaseStorage", "true" },
-							{ "shouldEnableAutoSyncCleanup", "true" },
+							{ "maxIncomingConnectionsPerIdentity", "7" },
 
-							{ "shouldEnableTransactionSpamThrottling", "true" },
+							{ "enableAddressReuse", "true" },
+							{ "enableSingleThreadPool", "true" },
+							{ "enableCacheDatabaseStorage", "true" },
+							{ "enableAutoSyncCleanup", "true" },
+
+							{ "enableTransactionSpamThrottling", "true" },
 							{ "transactionSpamThrottlingMaxBoostFee", "54'123" },
 
 							{ "maxBlocksPerSyncAttempt", "50" },
@@ -68,14 +72,19 @@ namespace catapult { namespace config {
 							{ "transactionDisruptorSize", "9876" },
 							{ "transactionElementTraceInterval", "98" },
 
-							{ "shouldAbortWhenDispatcherIsFull", "true" },
-							{ "shouldAuditDispatcherInputs", "true" },
+							{ "enableDispatcherAbortWhenFull", "true" },
+							{ "enableDispatcherInputAuditing", "true" },
 
 							{ "outgoingSecurityMode", "Signed" },
 							{ "incomingSecurityModes", "None, Signed" },
 
 							{ "maxCacheDatabaseWriteBatchSize", "17KB" },
-							{ "maxTrackedNodes", "222" }
+							{ "maxTrackedNodes", "222" },
+
+							{ "batchVerificationRandomSource", "/dev/random" },
+
+							{ "trustedHosts", "foo,BAR" },
+							{ "localNetworks", "1.2.3.4,9.8.7.6" }
 						}
 					},
 					{
@@ -105,6 +114,19 @@ namespace catapult { namespace config {
 							{ "numConsecutiveFailuresBeforeBanning", "19" },
 							{ "backlogSize", "21" }
 						}
+					},
+					{
+						"banning",
+						{
+							{ "defaultBanDuration", "5h" },
+							{ "maxBanDuration", "58h" },
+							{ "keepAliveDuration", "589h" },
+							{ "maxBannedNodes", "1928" },
+
+							{ "numReadRateMonitoringBuckets", "7" },
+							{ "readRateMonitoringBucketDuration", "9m" },
+							{ "maxReadRateMonitoringTotalSize", "11KB" }
+						}
 					}
 				};
 			}
@@ -117,12 +139,14 @@ namespace catapult { namespace config {
 				// Assert:
 				EXPECT_EQ(0u, config.Port);
 				EXPECT_EQ(0u, config.ApiPort);
-				EXPECT_FALSE(config.ShouldAllowAddressReuse);
-				EXPECT_FALSE(config.ShouldUseSingleThreadPool);
-				EXPECT_FALSE(config.ShouldUseCacheDatabaseStorage);
-				EXPECT_FALSE(config.ShouldEnableAutoSyncCleanup);
+				EXPECT_EQ(0u, config.MaxIncomingConnectionsPerIdentity);
 
-				EXPECT_FALSE(config.ShouldEnableTransactionSpamThrottling);
+				EXPECT_FALSE(config.EnableAddressReuse);
+				EXPECT_FALSE(config.EnableSingleThreadPool);
+				EXPECT_FALSE(config.EnableCacheDatabaseStorage);
+				EXPECT_FALSE(config.EnableAutoSyncCleanup);
+
+				EXPECT_FALSE(config.EnableTransactionSpamThrottling);
 				EXPECT_EQ(Amount(), config.TransactionSpamThrottlingMaxBoostFee);
 
 				EXPECT_EQ(0u, config.MaxBlocksPerSyncAttempt);
@@ -150,14 +174,19 @@ namespace catapult { namespace config {
 				EXPECT_EQ(0u, config.TransactionDisruptorSize);
 				EXPECT_EQ(0u, config.TransactionElementTraceInterval);
 
-				EXPECT_FALSE(config.ShouldAbortWhenDispatcherIsFull);
-				EXPECT_FALSE(config.ShouldAuditDispatcherInputs);
+				EXPECT_FALSE(config.EnableDispatcherAbortWhenFull);
+				EXPECT_FALSE(config.EnableDispatcherInputAuditing);
 
 				EXPECT_EQ(static_cast<ionet::ConnectionSecurityMode>(0), config.OutgoingSecurityMode);
 				EXPECT_EQ(static_cast<ionet::ConnectionSecurityMode>(0), config.IncomingSecurityModes);
 
 				EXPECT_EQ(utils::FileSize::FromMegabytes(0), config.MaxCacheDatabaseWriteBatchSize);
 				EXPECT_EQ(0u, config.MaxTrackedNodes);
+
+				EXPECT_EQ("", config.BatchVerificationRandomSource);
+
+				EXPECT_TRUE(config.TrustedHosts.empty());
+				EXPECT_TRUE(config.LocalNetworks.empty());
 
 				EXPECT_EQ("", config.Local.Host);
 				EXPECT_EQ("", config.Local.FriendlyName);
@@ -174,18 +203,29 @@ namespace catapult { namespace config {
 				EXPECT_EQ(0u, config.IncomingConnections.MaxConnectionBanAge);
 				EXPECT_EQ(0u, config.IncomingConnections.NumConsecutiveFailuresBeforeBanning);
 				EXPECT_EQ(0u, config.IncomingConnections.BacklogSize);
+
+				EXPECT_EQ(utils::TimeSpan(), config.Banning.DefaultBanDuration);
+				EXPECT_EQ(utils::TimeSpan(), config.Banning.MaxBanDuration);
+				EXPECT_EQ(utils::TimeSpan(), config.Banning.KeepAliveDuration);
+				EXPECT_EQ(0u, config.Banning.MaxBannedNodes);
+
+				EXPECT_EQ(0u, config.Banning.NumReadRateMonitoringBuckets);
+				EXPECT_EQ(utils::TimeSpan(), config.Banning.ReadRateMonitoringBucketDuration);
+				EXPECT_EQ(utils::FileSize(), config.Banning.MaxReadRateMonitoringTotalSize);
 			}
 
 			static void AssertCustom(const NodeConfiguration& config) {
 				// Assert:
 				EXPECT_EQ(1234u, config.Port);
 				EXPECT_EQ(8888u, config.ApiPort);
-				EXPECT_TRUE(config.ShouldAllowAddressReuse);
-				EXPECT_TRUE(config.ShouldUseSingleThreadPool);
-				EXPECT_TRUE(config.ShouldUseCacheDatabaseStorage);
-				EXPECT_TRUE(config.ShouldEnableAutoSyncCleanup);
+				EXPECT_EQ(7u, config.MaxIncomingConnectionsPerIdentity);
 
-				EXPECT_TRUE(config.ShouldEnableTransactionSpamThrottling);
+				EXPECT_TRUE(config.EnableAddressReuse);
+				EXPECT_TRUE(config.EnableSingleThreadPool);
+				EXPECT_TRUE(config.EnableCacheDatabaseStorage);
+				EXPECT_TRUE(config.EnableAutoSyncCleanup);
+
+				EXPECT_TRUE(config.EnableTransactionSpamThrottling);
 				EXPECT_EQ(Amount(54'123), config.TransactionSpamThrottlingMaxBoostFee);
 
 				EXPECT_EQ(50u, config.MaxBlocksPerSyncAttempt);
@@ -213,14 +253,19 @@ namespace catapult { namespace config {
 				EXPECT_EQ(9876u, config.TransactionDisruptorSize);
 				EXPECT_EQ(98u, config.TransactionElementTraceInterval);
 
-				EXPECT_TRUE(config.ShouldAbortWhenDispatcherIsFull);
-				EXPECT_TRUE(config.ShouldAuditDispatcherInputs);
+				EXPECT_TRUE(config.EnableDispatcherAbortWhenFull);
+				EXPECT_TRUE(config.EnableDispatcherInputAuditing);
 
 				EXPECT_EQ(ionet::ConnectionSecurityMode::Signed, config.OutgoingSecurityMode);
 				EXPECT_EQ(ionet::ConnectionSecurityMode::None | ionet::ConnectionSecurityMode::Signed, config.IncomingSecurityModes);
 
 				EXPECT_EQ(utils::FileSize::FromKilobytes(17), config.MaxCacheDatabaseWriteBatchSize);
 				EXPECT_EQ(222u, config.MaxTrackedNodes);
+
+				EXPECT_EQ("/dev/random", config.BatchVerificationRandomSource);
+
+				EXPECT_EQ(std::unordered_set<std::string>({ "foo", "BAR" }), config.TrustedHosts);
+				EXPECT_EQ(std::unordered_set<std::string>({ "1.2.3.4", "9.8.7.6" }), config.LocalNetworks);
 
 				EXPECT_EQ("alice.com", config.Local.Host);
 				EXPECT_EQ("a GREAT node", config.Local.FriendlyName);
@@ -237,9 +282,50 @@ namespace catapult { namespace config {
 				EXPECT_EQ(16u, config.IncomingConnections.MaxConnectionBanAge);
 				EXPECT_EQ(19u, config.IncomingConnections.NumConsecutiveFailuresBeforeBanning);
 				EXPECT_EQ(21u, config.IncomingConnections.BacklogSize);
+
+				EXPECT_EQ(utils::TimeSpan::FromHours(5), config.Banning.DefaultBanDuration);
+				EXPECT_EQ(utils::TimeSpan::FromHours(58), config.Banning.MaxBanDuration);
+				EXPECT_EQ(utils::TimeSpan::FromHours(589), config.Banning.KeepAliveDuration);
+				EXPECT_EQ(1928u, config.Banning.MaxBannedNodes);
+
+				EXPECT_EQ(7u, config.Banning.NumReadRateMonitoringBuckets);
+				EXPECT_EQ(utils::TimeSpan::FromMinutes(9), config.Banning.ReadRateMonitoringBucketDuration);
+				EXPECT_EQ(utils::FileSize::FromKilobytes(11), config.Banning.MaxReadRateMonitoringTotalSize);
 			}
 		};
 	}
 
 	DEFINE_CONFIGURATION_TESTS(NodeConfigurationTests, Node)
+
+	// region utils
+
+	namespace {
+		auto CreateLocalNetworks() {
+			return std::unordered_set<std::string>{ "11.22.33.44", "22.33.44.55", "33.44" };
+		}
+	}
+
+	TEST(TEST_CLASS, IsLocalHostReturnsTrueWhenHostIsContainedInLocalNetworks) {
+		// Arrange:
+		auto localNetworks = CreateLocalNetworks();
+
+		// Act + Assert:
+		EXPECT_TRUE(IsLocalHost("11.22.33.44", localNetworks));
+		EXPECT_TRUE(IsLocalHost("22.33.44.55", localNetworks));
+		EXPECT_TRUE(IsLocalHost("33.44.55", localNetworks));
+	}
+
+	TEST(TEST_CLASS, IsLocalHostReturnsFalseWhenHostIsNotContainedInLocalNetworks) {
+		// Arrange:
+		auto localNetworks = CreateLocalNetworks();
+
+		// Act + Assert:
+		EXPECT_FALSE(IsLocalHost("12.22.33.44", localNetworks));
+		EXPECT_FALSE(IsLocalHost("111.222.333.444.555", localNetworks));
+		EXPECT_FALSE(IsLocalHost("11.22.33", localNetworks));
+		EXPECT_FALSE(IsLocalHost("1.2.3.4", localNetworks));
+		EXPECT_FALSE(IsLocalHost("", localNetworks));
+	}
+
+	// endregion
 }}

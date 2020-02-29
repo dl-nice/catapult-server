@@ -19,6 +19,7 @@
 **/
 
 #pragma once
+#include "catapult/plugins.h"
 #include "catapult/types.h"
 #include <memory>
 #include <string>
@@ -65,18 +66,18 @@ namespace catapult { namespace cache {
 	// region SubCacheView / DetachedSubCacheView
 
 	/// Sub cache view.
-	class SubCacheView {
+	class PLUGIN_API_DEPENDENCY SubCacheView {
 	public:
 		virtual ~SubCacheView() = default;
 
 	public:
-		/// Gets view identifier.
+		/// Gets the view identifier.
 		virtual const SubCacheViewIdentifier& id() const = 0;
 
-		/// Returns a const pointer to the underlying view.
+		/// Gets a const pointer to the underlying view.
 		virtual const void* get() const = 0;
 
-		/// Returns a pointer to the underlying view.
+		/// Gets a pointer to the underlying view.
 		virtual void* get() = 0;
 
 		/// Returns \c true if cache supports merkle root.
@@ -91,12 +92,12 @@ namespace catapult { namespace cache {
 		/// Recalculates the merkle root given the specified chain \a height if supported.
 		virtual void updateMerkleRoot(Height height) = 0;
 
-		/// Returns a read-only view of this view.
+		/// Gets a read-only view of this view.
 		virtual const void* asReadOnly() const = 0;
 	};
 
 	/// Detached sub cache view.
-	class DetachedSubCacheView {
+	class PLUGIN_API_DEPENDENCY DetachedSubCacheView {
 	public:
 		virtual ~DetachedSubCacheView() = default;
 
@@ -123,14 +124,14 @@ namespace catapult { namespace cache {
 		virtual size_t id() const = 0;
 
 	public:
-		/// Returns a locked cache view based on this cache.
+		/// Gets a locked cache view based on this cache.
 		virtual std::unique_ptr<const SubCacheView> createView() const = 0;
 
-		/// Returns a locked cache delta based on this cache.
+		/// Gets a locked cache delta based on this cache.
 		/// \note Changes to an attached delta can be committed by calling commit.
 		virtual std::unique_ptr<SubCacheView> createDelta() = 0;
 
-		/// Returns a lockable cache delta based on this cache but without the ability
+		/// Gets a lockable cache delta based on this cache but without the ability
 		/// to commit any changes to the original cache.
 		virtual std::unique_ptr<DetachedSubCacheView> createDetachedDelta() const = 0;
 
@@ -138,14 +139,14 @@ namespace catapult { namespace cache {
 		virtual void commit() = 0;
 
 	public:
-		/// Returns a const pointer to the underlying cache.
+		/// Gets a const pointer to the underlying cache.
 		virtual const void* get() const = 0;
 
 	public:
-		/// Returns a cache storage based on this cache.
+		/// Gets a cache storage based on this cache.
 		virtual std::unique_ptr<CacheStorage> createStorage() = 0;
 
-		/// Returns a cache changes storage based on this cache.
+		/// Gets a cache changes storage based on this cache.
 		virtual std::unique_ptr<CacheChangesStorage> createChangesStorage() const = 0;
 	};
 

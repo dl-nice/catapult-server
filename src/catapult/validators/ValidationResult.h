@@ -62,10 +62,10 @@ namespace catapult { namespace validators {
 	/// Makes a validation result given \a severity, \a facility, \a code and \a flags.
 	constexpr ValidationResult MakeValidationResult(ResultSeverity severity, FacilityCode facility, uint16_t code, ResultFlags flags) {
 		return static_cast<ValidationResult>(
-				(static_cast<uint32_t>(severity) & 0x03) << 30 | // 01..02: severity
-				(static_cast<uint32_t>(flags) & 0x3F) << 24 | //    03..08: flags
-				static_cast<uint32_t>(facility) << 16 | //          09..16: facility
-				code); //                                           16..32: code
+				(static_cast<uint32_t>(severity) & 0x03) << 30 // 01..02: severity
+				| (static_cast<uint32_t>(flags) & 0x3F) << 24 //  03..08: flags
+				| static_cast<uint32_t>(facility) << 16 //        09..16: facility
+				| code); //                                       16..32: code
 	}
 
 /// Defines a validation result given \a SEVERITY, \a FACILITY, \a DESCRIPTION, \a CODE and \a FLAGS.
@@ -86,12 +86,12 @@ namespace catapult { namespace validators {
 		return utils::to_underlying_type(flags) == (utils::to_underlying_type(flags) & (utils::to_underlying_type(result) >> 24 & 0x3F));
 	}
 
-	/// Returns a value indicating whether the validation \a result is a success.
+	/// Gets a value indicating whether the validation \a result is a success.
 	constexpr bool IsValidationResultSuccess(ValidationResult result) {
 		return ResultSeverity::Success == GetSeverity(result);
 	}
 
-	/// Returns a value indicating whether the validation \a result is a failure.
+	/// Gets a value indicating whether the validation \a result is a failure.
 	constexpr bool IsValidationResultFailure(ValidationResult result) {
 		return ResultSeverity::Failure == GetSeverity(result);
 	}

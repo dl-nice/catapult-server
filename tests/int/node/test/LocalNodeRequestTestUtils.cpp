@@ -23,8 +23,9 @@
 #include "plugins/txes/mosaic/src/plugins/MosaicDefinitionTransactionPlugin.h"
 #include "plugins/txes/mosaic/src/plugins/MosaicSupplyChangeTransactionPlugin.h"
 #include "plugins/txes/namespace/src/plugins/MosaicAliasTransactionPlugin.h"
-#include "plugins/txes/namespace/src/plugins/RegisterNamespaceTransactionPlugin.h"
+#include "plugins/txes/namespace/src/plugins/NamespaceRegistrationTransactionPlugin.h"
 #include "plugins/txes/transfer/src/plugins/TransferTransactionPlugin.h"
+#include "catapult/preprocessor.h"
 #include "tests/test/core/BlockTestUtils.h"
 #include "tests/test/local/RealTransactionFactory.h"
 
@@ -37,7 +38,7 @@ namespace catapult { namespace test {
 		registry.registerPlugin(plugins::CreateMosaicDefinitionTransactionPlugin(plugins::MosaicRentalFeeConfiguration()));
 		registry.registerPlugin(plugins::CreateMosaicSupplyChangeTransactionPlugin());
 		registry.registerPlugin(plugins::CreateMosaicAliasTransactionPlugin());
-		registry.registerPlugin(plugins::CreateRegisterNamespaceTransactionPlugin(plugins::NamespaceRentalFeeConfiguration()));
+		registry.registerPlugin(plugins::CreateNamespaceRegistrationTransactionPlugin(plugins::NamespaceRentalFeeConfiguration()));
 		registry.registerPlugin(plugins::CreateTransferTransactionPlugin());
 		return registry;
 	}
@@ -64,7 +65,7 @@ namespace catapult { namespace test {
 
 	namespace {
 		crypto::KeyPair GetNemesisAccountKeyPair() {
-			return crypto::KeyPair::FromString(Mijin_Test_Private_Keys[0]); // use a nemesis account
+			return crypto::KeyPair::FromString(Mijin_Test_Private_Keys[5]); // use a nemesis account
 		}
 
 		std::shared_ptr<model::Block> CreateBlock() {
@@ -78,7 +79,7 @@ namespace catapult { namespace test {
 			auto pBlock = model::CreateBlock(context, Network_Identifier, signer.publicKey(), model::Transactions());
 			pBlock->Timestamp = context.Timestamp + Timestamp(60000);
 			extensions::BlockExtensions(GetDefaultGenerationHash()).signFullBlock(signer, *pBlock);
-			return std::move(pBlock);
+			return PORTABLE_MOVE(pBlock);
 		}
 	}
 

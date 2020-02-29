@@ -20,7 +20,7 @@
 
 #include "AccountStateCacheView.h"
 #include "catapult/model/Address.h"
-#include "catapult/model/NetworkInfo.h"
+#include "catapult/model/NetworkIdentifier.h"
 
 namespace catapult { namespace cache {
 
@@ -64,6 +64,10 @@ namespace catapult { namespace cache {
 
 	Amount BasicAccountStateCacheView::minHarvesterBalance() const {
 		return m_options.MinHarvesterBalance;
+	}
+
+	Amount BasicAccountStateCacheView::maxHarvesterBalance() const {
+		return m_options.MaxHarvesterBalance;
 	}
 
 	MosaicId BasicAccountStateCacheView::harvestingMosaicId() const {

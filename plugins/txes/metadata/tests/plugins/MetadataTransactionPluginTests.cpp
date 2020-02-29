@@ -56,11 +56,15 @@ namespace catapult { namespace plugins {
 			}
 
 			static const auto& AppendExpectedCustomNotificationTypes(std::vector<NotificationType>&& notificationTypes) {
+				notificationTypes.push_back(AccountPublicKeyNotification::Notification_Type);
 				return notificationTypes;
 			}
 
-			static void AddCustomExpectations(PublishTestBuilder&, const TTransaction&)
-			{}
+			static void AddCustomExpectations(PublishTestBuilder& builder, const TTransaction& transaction) {
+				builder.template addExpectation<AccountPublicKeyNotification>([&transaction](const auto& notification) {
+					EXPECT_EQ(transaction.TargetPublicKey, notification.PublicKey);
+				});
+			}
 		};
 
 		using AccountRegularTraits = AccountTraits<AccountMetadataTransaction, AccountMetadataRegularTraits>;
@@ -77,7 +81,7 @@ namespace catapult { namespace plugins {
 
 		public:
 			static uint64_t GetTargetId(const TTransaction& transaction) {
-				return transaction.TargetId.unwrap();
+				return transaction.TargetMosaicId.unwrap();
 			}
 
 			static const auto& AppendExpectedCustomNotificationTypes(std::vector<NotificationType>&& notificationTypes) {
@@ -89,7 +93,7 @@ namespace catapult { namespace plugins {
 				builder.template addExpectation<MosaicRequiredNotification>([&transaction](const auto& notification) {
 					EXPECT_EQ(transaction.TargetPublicKey, notification.Signer);
 					EXPECT_EQ(MosaicId(), notification.MosaicId);
-					EXPECT_EQ(transaction.TargetId, notification.UnresolvedMosaicId);
+					EXPECT_EQ(transaction.TargetMosaicId, notification.UnresolvedMosaicId);
 					EXPECT_EQ(0u, notification.PropertyFlagMask);
 					EXPECT_EQ(MosaicRequiredNotification::MosaicType::Unresolved, notification.ProvidedMosaicType);
 				});
@@ -110,7 +114,7 @@ namespace catapult { namespace plugins {
 
 		public:
 			static uint64_t GetTargetId(const TTransaction& transaction) {
-				return transaction.TargetId.unwrap();
+				return transaction.TargetNamespaceId.unwrap();
 			}
 
 			static const auto& AppendExpectedCustomNotificationTypes(std::vector<NotificationType>&& notificationTypes) {
@@ -121,7 +125,7 @@ namespace catapult { namespace plugins {
 			static void AddCustomExpectations(PublishTestBuilder& builder, const TTransaction& transaction) {
 				builder.template addExpectation<NamespaceRequiredNotification>([&transaction](const auto& notification) {
 					EXPECT_EQ(transaction.TargetPublicKey, notification.Signer);
-					EXPECT_EQ(transaction.TargetId, notification.NamespaceId);
+					EXPECT_EQ(transaction.TargetNamespaceId, notification.NamespaceId);
 				});
 			}
 		};
@@ -190,7 +194,7 @@ namespace catapult { namespace plugins {
 		});
 		builder.template addExpectation<MetadataValueNotification>([&transaction](const auto& notification) {
 			// partial metadata key
-			EXPECT_EQ(transaction.Signer, notification.PartialMetadataKey.SourcePublicKey);
+			EXPECT_EQ(transaction.SignerPublicKey, notification.PartialMetadataKey.SourcePublicKey);
 			EXPECT_EQ(transaction.TargetPublicKey, notification.PartialMetadataKey.TargetPublicKey);
 			EXPECT_EQ(transaction.ScopedMetadataKey, notification.PartialMetadataKey.ScopedMetadataKey);
 
@@ -211,7 +215,7 @@ namespace catapult { namespace plugins {
 
 	// endregion
 
-	// region additionalRequiredCosigners
+	// region additionalRequiredCosignatories
 
 #define METADATA_EMBEDDED_PLUGIN_BASED_TEST(TEST_NAME) \
 	template<typename TTraits> void TRAITS_TEST_NAME(TEST_CLASS, TEST_NAME)(); \
@@ -220,7 +224,7 @@ namespace catapult { namespace plugins {
 	TEST(TEST_CLASS, TEST_NAME##_Namespace) { TRAITS_TEST_NAME(TEST_CLASS, TEST_NAME)<NamespaceEmbeddedTraits>(); } \
 	template<typename TTraits> void TRAITS_TEST_NAME(TEST_CLASS, TEST_NAME)()
 
-	METADATA_EMBEDDED_PLUGIN_BASED_TEST(CanExtractAdditionalRequiredCosignersFromEmbedded) {
+	METADATA_EMBEDDED_PLUGIN_BASED_TEST(CanExtractAdditionalRequiredCosignatoriesFromEmbedded) {
 		// Arrange:
 		auto pPlugin = TTraits::CreatePlugin();
 
@@ -228,10 +232,10 @@ namespace catapult { namespace plugins {
 		test::FillWithRandomData(transaction);
 
 		// Act:
-		auto additionalCosigners = pPlugin->additionalRequiredCosigners(transaction);
+		auto additionalCosignatories = pPlugin->additionalRequiredCosignatories(transaction);
 
 		// Assert:
-		EXPECT_EQ(utils::KeySet{ transaction.TargetPublicKey }, additionalCosigners);
+		EXPECT_EQ(utils::KeySet{ transaction.TargetPublicKey }, additionalCosignatories);
 	}
 
 	// endregion

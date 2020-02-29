@@ -24,13 +24,19 @@ namespace catapult { namespace builders {
 
 	TransferBuilder::TransferBuilder(model::NetworkIdentifier networkIdentifier, const Key& signer)
 			: TransactionBuilder(networkIdentifier, signer)
-			, m_recipient()
-			, m_message()
+			, m_recipientAddress()
 			, m_mosaics()
+			, m_message()
 	{}
 
-	void TransferBuilder::setRecipient(const UnresolvedAddress& recipient) {
-		m_recipient = recipient;
+	void TransferBuilder::setRecipientAddress(const UnresolvedAddress& recipientAddress) {
+		m_recipientAddress = recipientAddress;
+	}
+
+	void TransferBuilder::addMosaic(const model::UnresolvedMosaic& mosaic) {
+		InsertSorted(m_mosaics, mosaic, [](const auto& lhs, const auto& rhs) {
+			return lhs.MosaicId < rhs.MosaicId;
+		});
 	}
 
 	void TransferBuilder::setMessage(const RawBuffer& message) {
@@ -42,12 +48,6 @@ namespace catapult { namespace builders {
 
 		m_message.resize(message.Size);
 		m_message.assign(message.pData, message.pData + message.Size);
-	}
-
-	void TransferBuilder::addMosaic(const model::UnresolvedMosaic& mosaic) {
-		InsertSorted(m_mosaics, mosaic, [](const auto& lhs, const auto& rhs) {
-			return lhs.MosaicId < rhs.MosaicId;
-		});
 	}
 
 	size_t TransferBuilder::size() const {
@@ -66,8 +66,8 @@ namespace catapult { namespace builders {
 	size_t TransferBuilder::sizeImpl() const {
 		// calculate transaction size
 		auto size = sizeof(TransactionType);
-		size += m_message.size();
 		size += m_mosaics.size() * sizeof(model::UnresolvedMosaic);
+		size += m_message.size();
 		return size;
 	}
 
@@ -77,13 +77,14 @@ namespace catapult { namespace builders {
 		auto pTransaction = createTransaction<TransactionType>(sizeImpl<TransactionType>());
 
 		// 2. set fixed transaction fields
-		pTransaction->Recipient = m_recipient;
-		pTransaction->MessageSize = utils::checked_cast<size_t, uint16_t>(m_message.size());
+		pTransaction->RecipientAddress = m_recipientAddress;
 		pTransaction->MosaicsCount = utils::checked_cast<size_t, uint8_t>(m_mosaics.size());
+		pTransaction->MessageSize = utils::checked_cast<size_t, uint16_t>(m_message.size());
+		pTransaction->TransferTransactionBody_Reserved1 = 0;
 
 		// 3. set transaction attachments
-		std::copy(m_message.cbegin(), m_message.cend(), pTransaction->MessagePtr());
 		std::copy(m_mosaics.cbegin(), m_mosaics.cend(), pTransaction->MosaicsPtr());
+		std::copy(m_message.cbegin(), m_message.cend(), pTransaction->MessagePtr());
 
 		return pTransaction;
 	}

@@ -44,15 +44,17 @@ namespace catapult { namespace model {
 						"network",
 						{
 							{ "identifier", "public-test" },
+							{ "nodeEqualityStrategy", "host" },
 							{ "publicKey", Nemesis_Public_Key },
-							{ "generationHash", Nemesis_Generation_Hash }
+							{ "generationHash", Nemesis_Generation_Hash },
+							{ "epochAdjustment", "1234567h" }
 						}
 					},
 					{
 						"chain",
 						{
-							{ "shouldEnableVerifiableState", "true" },
-							{ "shouldEnableVerifiableReceipts", "true" },
+							{ "enableVerifiableState", "true" },
+							{ "enableVerifiableReceipts", "true" },
 
 							{ "currencyMosaicId", "0x1234'AAAA" },
 							{ "harvestingMosaicId", "0x9876'BBBB" },
@@ -64,6 +66,7 @@ namespace catapult { namespace model {
 							{ "importanceActivityPercentage", "15" },
 							{ "maxRollbackBlocks", "720" },
 							{ "maxDifficultyBlocks", "15" },
+							{ "defaultDynamicFeeMultiplier", "9876" },
 
 							{ "maxTransactionLifetime", "30m" },
 							{ "maxBlockFutureTime", "21m" },
@@ -73,6 +76,7 @@ namespace catapult { namespace model {
 
 							{ "totalChainImportance", "88'000'000'000" },
 							{ "minHarvesterBalance", "4'000'000'000" },
+							{ "maxHarvesterBalance", "9'000'000'000" },
 							{ "harvestBeneficiaryPercentage", "56" },
 
 							{ "blockPruneInterval", "432" },
@@ -102,11 +106,13 @@ namespace catapult { namespace model {
 			static void AssertZero(const BlockChainConfiguration& config) {
 				// Assert:
 				EXPECT_EQ(NetworkIdentifier::Zero, config.Network.Identifier);
+				EXPECT_EQ(static_cast<NodeIdentityEqualityStrategy>(0), config.Network.NodeEqualityStrategy);
 				EXPECT_EQ(Key(), config.Network.PublicKey);
 				EXPECT_EQ(GenerationHash(), config.Network.GenerationHash);
+				EXPECT_EQ(utils::TimeSpan(), config.Network.EpochAdjustment);
 
-				EXPECT_FALSE(config.ShouldEnableVerifiableState);
-				EXPECT_FALSE(config.ShouldEnableVerifiableReceipts);
+				EXPECT_FALSE(config.EnableVerifiableState);
+				EXPECT_FALSE(config.EnableVerifiableReceipts);
 
 				EXPECT_EQ(MosaicId(), config.CurrencyMosaicId);
 				EXPECT_EQ(MosaicId(), config.HarvestingMosaicId);
@@ -118,6 +124,7 @@ namespace catapult { namespace model {
 				EXPECT_EQ(0u, config.ImportanceActivityPercentage);
 				EXPECT_EQ(0u, config.MaxRollbackBlocks);
 				EXPECT_EQ(0u, config.MaxDifficultyBlocks);
+				EXPECT_EQ(BlockFeeMultiplier(0), config.DefaultDynamicFeeMultiplier);
 
 				EXPECT_EQ(utils::TimeSpan::FromMinutes(0), config.MaxTransactionLifetime);
 				EXPECT_EQ(utils::TimeSpan::FromMinutes(0), config.MaxBlockFutureTime);
@@ -127,6 +134,7 @@ namespace catapult { namespace model {
 
 				EXPECT_EQ(Importance(0), config.TotalChainImportance);
 				EXPECT_EQ(Amount(0), config.MinHarvesterBalance);
+				EXPECT_EQ(Amount(0), config.MaxHarvesterBalance);
 				EXPECT_EQ(0u, config.HarvestBeneficiaryPercentage);
 
 				EXPECT_EQ(0u, config.BlockPruneInterval);
@@ -138,11 +146,13 @@ namespace catapult { namespace model {
 			static void AssertCustom(const BlockChainConfiguration& config) {
 				// Assert: notice that ParseKey also works for Hash256 because it is the same type as Key
 				EXPECT_EQ(NetworkIdentifier::Public_Test, config.Network.Identifier);
+				EXPECT_EQ(NodeIdentityEqualityStrategy::Host, config.Network.NodeEqualityStrategy);
 				EXPECT_EQ(crypto::ParseKey(Nemesis_Public_Key), config.Network.PublicKey);
 				EXPECT_EQ(utils::ParseByteArray<GenerationHash>(Nemesis_Generation_Hash), config.Network.GenerationHash);
+				EXPECT_EQ(utils::TimeSpan::FromHours(1234567), config.Network.EpochAdjustment);
 
-				EXPECT_TRUE(config.ShouldEnableVerifiableState);
-				EXPECT_TRUE(config.ShouldEnableVerifiableReceipts);
+				EXPECT_TRUE(config.EnableVerifiableState);
+				EXPECT_TRUE(config.EnableVerifiableReceipts);
 
 				EXPECT_EQ(MosaicId(0x1234'AAAA), config.CurrencyMosaicId);
 				EXPECT_EQ(MosaicId(0x9876'BBBB), config.HarvestingMosaicId);
@@ -154,6 +164,7 @@ namespace catapult { namespace model {
 				EXPECT_EQ(15u, config.ImportanceActivityPercentage);
 				EXPECT_EQ(720u, config.MaxRollbackBlocks);
 				EXPECT_EQ(15u, config.MaxDifficultyBlocks);
+				EXPECT_EQ(BlockFeeMultiplier(9876), config.DefaultDynamicFeeMultiplier);
 
 				EXPECT_EQ(utils::TimeSpan::FromMinutes(30), config.MaxTransactionLifetime);
 				EXPECT_EQ(utils::TimeSpan::FromMinutes(21), config.MaxBlockFutureTime);
@@ -163,6 +174,7 @@ namespace catapult { namespace model {
 
 				EXPECT_EQ(Importance(88'000'000'000), config.TotalChainImportance);
 				EXPECT_EQ(Amount(4'000'000'000), config.MinHarvesterBalance);
+				EXPECT_EQ(Amount(9'000'000'000), config.MaxHarvesterBalance);
 				EXPECT_EQ(56u, config.HarvestBeneficiaryPercentage);
 
 				EXPECT_EQ(432u, config.BlockPruneInterval);

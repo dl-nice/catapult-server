@@ -48,18 +48,17 @@ namespace catapult { namespace config {
 		void AssertDefaultBlockChainConfiguration(const model::BlockChainConfiguration& config) {
 			// Assert:
 			EXPECT_EQ(model::NetworkIdentifier::Mijin_Test, config.Network.Identifier);
-			EXPECT_EQ(crypto::ParseKey("B4F12E7C9F6946091E2CB8B6D3A12B50D17CCBBF646386EA27CE2946A7423DCF"), config.Network.PublicKey);
+			EXPECT_EQ(model::NodeIdentityEqualityStrategy::Host, config.Network.NodeEqualityStrategy);
+			EXPECT_EQ(crypto::ParseKey("C67F465087EF681824805B7E9FF3B2728A4EE847DE044DE5D9FA415F7660B08E"), config.Network.PublicKey);
 			EXPECT_EQ(
 					utils::ParseByteArray<GenerationHash>("57F7DA205008026C776CB6AED843393F04CD458E0AA2D9F1D5F31A402072B2D6"),
 					config.Network.GenerationHash);
 
-			EXPECT_TRUE(config.ShouldEnableVerifiableState);
-			EXPECT_TRUE(config.ShouldEnableVerifiableReceipts);
+			EXPECT_TRUE(config.EnableVerifiableState);
+			EXPECT_TRUE(config.EnableVerifiableReceipts);
 
-			// - raw values are used instead of test::Default_*_Mosaic_Ids because
-			// config files contain mosaic ids when SIGNATURE_SCHEME_NIS1 is disabled
-			EXPECT_EQ(MosaicId(0x0DC6'7FBE'1CAD'29E3), config.CurrencyMosaicId);
-			EXPECT_EQ(MosaicId(0x2651'4E2A'1EF3'3824), config.HarvestingMosaicId);
+			EXPECT_EQ(test::Default_Currency_Mosaic_Id, config.CurrencyMosaicId);
+			EXPECT_EQ(test::Default_Harvesting_Mosaic_Id, config.HarvestingMosaicId);
 
 			EXPECT_EQ(utils::TimeSpan::FromSeconds(15), config.BlockGenerationTargetTime);
 			EXPECT_EQ(3000u, config.BlockTimeSmoothingFactor);
@@ -68,15 +67,17 @@ namespace catapult { namespace config {
 			EXPECT_EQ(5u, config.ImportanceActivityPercentage);
 			EXPECT_EQ(40u, config.MaxRollbackBlocks);
 			EXPECT_EQ(60u, config.MaxDifficultyBlocks);
+			EXPECT_EQ(BlockFeeMultiplier(10'000), config.DefaultDynamicFeeMultiplier);
 
 			EXPECT_EQ(utils::TimeSpan::FromHours(24), config.MaxTransactionLifetime);
-			EXPECT_EQ(utils::TimeSpan::FromSeconds(10), config.MaxBlockFutureTime);
+			EXPECT_EQ(utils::TimeSpan::FromMilliseconds(500), config.MaxBlockFutureTime);
 
 			EXPECT_EQ(Amount(8'998'999'998'000'000), config.InitialCurrencyAtomicUnits);
 			EXPECT_EQ(Amount(9'000'000'000'000'000), config.MaxMosaicAtomicUnits);
 
 			EXPECT_EQ(Importance(15'000'000), config.TotalChainImportance);
 			EXPECT_EQ(Amount(500), config.MinHarvesterBalance);
+			EXPECT_EQ(Amount(4'000'000), config.MaxHarvesterBalance);
 			EXPECT_EQ(10u, config.HarvestBeneficiaryPercentage);
 
 			EXPECT_EQ(360u, config.BlockPruneInterval);
@@ -89,15 +90,17 @@ namespace catapult { namespace config {
 			// Assert:
 			EXPECT_EQ(7900u, config.Port);
 			EXPECT_EQ(7901u, config.ApiPort);
-			EXPECT_FALSE(config.ShouldAllowAddressReuse);
-			EXPECT_FALSE(config.ShouldUseSingleThreadPool);
-			EXPECT_TRUE(config.ShouldUseCacheDatabaseStorage);
-			EXPECT_TRUE(config.ShouldEnableAutoSyncCleanup);
+			EXPECT_EQ(3u, config.MaxIncomingConnectionsPerIdentity);
 
-			EXPECT_TRUE(config.ShouldEnableTransactionSpamThrottling);
+			EXPECT_FALSE(config.EnableAddressReuse);
+			EXPECT_FALSE(config.EnableSingleThreadPool);
+			EXPECT_TRUE(config.EnableCacheDatabaseStorage);
+			EXPECT_TRUE(config.EnableAutoSyncCleanup);
+
+			EXPECT_TRUE(config.EnableTransactionSpamThrottling);
 			EXPECT_EQ(Amount(10'000'000), config.TransactionSpamThrottlingMaxBoostFee);
 
-			EXPECT_EQ(400u, config.MaxBlocksPerSyncAttempt);
+			EXPECT_EQ(42u, config.MaxBlocksPerSyncAttempt);
 			EXPECT_EQ(utils::FileSize::FromMegabytes(100), config.MaxChainBytesPerSyncAttempt);
 
 			EXPECT_EQ(utils::TimeSpan::FromMinutes(10), config.ShortLivedCacheTransactionDuration);
@@ -122,8 +125,8 @@ namespace catapult { namespace config {
 			EXPECT_EQ(16384u, config.TransactionDisruptorSize);
 			EXPECT_EQ(10u, config.TransactionElementTraceInterval);
 
-			EXPECT_TRUE(config.ShouldAbortWhenDispatcherIsFull);
-			EXPECT_TRUE(config.ShouldAuditDispatcherInputs);
+			EXPECT_TRUE(config.EnableDispatcherAbortWhenFull);
+			EXPECT_TRUE(config.EnableDispatcherInputAuditing);
 
 			EXPECT_EQ(ionet::ConnectionSecurityMode::None, config.OutgoingSecurityMode);
 			EXPECT_EQ(ionet::ConnectionSecurityMode::None, config.IncomingSecurityModes);
@@ -131,21 +134,35 @@ namespace catapult { namespace config {
 			EXPECT_EQ(utils::FileSize::FromMegabytes(5), config.MaxCacheDatabaseWriteBatchSize);
 			EXPECT_EQ(5'000u, config.MaxTrackedNodes);
 
+			EXPECT_EQ("/dev/urandom", config.BatchVerificationRandomSource);
+
+			EXPECT_TRUE(config.TrustedHosts.empty());
+			EXPECT_EQ(std::unordered_set<std::string>({ "127.0.0.1" }), config.LocalNetworks);
+
 			EXPECT_EQ("", config.Local.Host);
 			EXPECT_EQ("", config.Local.FriendlyName);
 			EXPECT_EQ(0u, config.Local.Version);
 			EXPECT_EQ(ionet::NodeRoles::Peer, config.Local.Roles);
 
 			EXPECT_EQ(10u, config.OutgoingConnections.MaxConnections);
-			EXPECT_EQ(5u, config.OutgoingConnections.MaxConnectionAge);
+			EXPECT_EQ(200u, config.OutgoingConnections.MaxConnectionAge);
 			EXPECT_EQ(20u, config.OutgoingConnections.MaxConnectionBanAge);
 			EXPECT_EQ(3u, config.OutgoingConnections.NumConsecutiveFailuresBeforeBanning);
 
 			EXPECT_EQ(512u, config.IncomingConnections.MaxConnections);
-			EXPECT_EQ(10u, config.IncomingConnections.MaxConnectionAge);
+			EXPECT_EQ(200u, config.IncomingConnections.MaxConnectionAge);
 			EXPECT_EQ(20u, config.IncomingConnections.MaxConnectionBanAge);
 			EXPECT_EQ(3u, config.IncomingConnections.NumConsecutiveFailuresBeforeBanning);
 			EXPECT_EQ(512u, config.IncomingConnections.BacklogSize);
+
+			EXPECT_EQ(utils::TimeSpan::FromHours(12), config.Banning.DefaultBanDuration);
+			EXPECT_EQ(utils::TimeSpan::FromHours(72), config.Banning.MaxBanDuration);
+			EXPECT_EQ(utils::TimeSpan::FromHours(48), config.Banning.KeepAliveDuration);
+			EXPECT_EQ(5'000u, config.Banning.MaxBannedNodes);
+
+			EXPECT_EQ(4u, config.Banning.NumReadRateMonitoringBuckets);
+			EXPECT_EQ(utils::TimeSpan::FromSeconds(15), config.Banning.ReadRateMonitoringBucketDuration);
+			EXPECT_EQ(utils::FileSize::FromMegabytes(100), config.Banning.MaxReadRateMonitoringTotalSize);
 		}
 
 		void AssertDefaultLoggingConfiguration(
@@ -176,7 +193,8 @@ namespace catapult { namespace config {
 
 		void AssertDefaultUserConfiguration(const UserConfiguration& config) {
 			// Assert:
-			EXPECT_EQ("0000000000000000000000000000000000000000000000000000000000000000", config.BootKey);
+			EXPECT_EQ("0000000000000000000000000000000000000000000000000000000000000000", config.BootPrivateKey);
+			EXPECT_TRUE(config.EnableDelegatedHarvestersAutoDetection);
 
 			EXPECT_EQ("../data", config.DataDirectory);
 			EXPECT_EQ(".", config.PluginsDirectory);
@@ -291,9 +309,12 @@ namespace catapult { namespace config {
 	// region ToLocalNode
 
 	namespace {
+		constexpr auto Generation_Hash_String = "272C4ECC55B7A42A07478A9550543C62673D1599A8362CC662E019049B76B7F2";
+
 		auto CreateCatapultConfiguration(const std::string& privateKeyString) {
 			test::MutableCatapultConfiguration config;
 			config.BlockChain.Network.Identifier = model::NetworkIdentifier::Mijin_Test;
+			config.BlockChain.Network.GenerationHash = utils::ParseByteArray<GenerationHash>(Generation_Hash_String);
 
 			config.Node.Port = 9876;
 			config.Node.Local.Host = "alice.com";
@@ -301,7 +322,7 @@ namespace catapult { namespace config {
 			config.Node.Local.Version = 123;
 			config.Node.Local.Roles = ionet::NodeRoles::Api;
 
-			config.User.BootKey = privateKeyString;
+			config.User.BootPrivateKey = privateKeyString;
 			return config.ToConst();
 		}
 	}
@@ -316,14 +337,17 @@ namespace catapult { namespace config {
 		auto node = ToLocalNode(config);
 
 		// Assert:
-		EXPECT_EQ(keyPair.publicKey(), node.identityKey());
+		const auto& identity = node.identity();
+		EXPECT_EQ(keyPair.publicKey(), identity.PublicKey);
+		EXPECT_EQ("127.0.0.1", identity.Host);
 
 		const auto& endpoint = node.endpoint();
 		EXPECT_EQ("alice.com", endpoint.Host);
 		EXPECT_EQ(9876u, endpoint.Port);
 
 		const auto& metadata = node.metadata();
-		EXPECT_EQ(model::NetworkIdentifier::Mijin_Test, metadata.NetworkIdentifier);
+		EXPECT_EQ(model::NetworkIdentifier::Mijin_Test, metadata.NetworkFingerprint.Identifier);
+		EXPECT_EQ(utils::ParseByteArray<GenerationHash>(Generation_Hash_String), metadata.NetworkFingerprint.GenerationHash);
 		EXPECT_EQ("a GREAT node", metadata.Name);
 		EXPECT_EQ(ionet::NodeVersion(123), metadata.Version);
 		EXPECT_EQ(ionet::NodeRoles::Api, metadata.Roles);

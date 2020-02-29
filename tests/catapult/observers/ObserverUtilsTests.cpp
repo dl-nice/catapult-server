@@ -35,8 +35,7 @@ namespace catapult { namespace observers {
 			// Arrange:
 			auto cache = test::CreateEmptyCatapultCache();
 			auto cacheDelta = cache.createDelta();
-			state::CatapultState state;
-			ObserverContext context({ cacheDelta, state }, height, mode, model::ResolverContext());
+			ObserverContext context(ObserverState(cacheDelta), height, mode, model::ResolverContext());
 
 			// Act:
 			auto result = ShouldPrune(context, pruneInterval);
@@ -216,7 +215,7 @@ namespace catapult { namespace observers {
 		using PruningObserver = NotificationObserverT<model::BlockNotification>;
 
 		void NotifyBlock(const PruningObserver& observer, ObserverContext& context, Timestamp timestamp) {
-			observer.notify(model::BlockNotification(Key(), Key(), timestamp, Difficulty()), context);
+			observer.notify(model::BlockNotification(Key(), Key(), timestamp, Difficulty(), BlockFeeMultiplier()), context);
 		}
 
 		void NotifyBlock(const PruningObserver& observer, ObserverContext& context) {
@@ -227,8 +226,7 @@ namespace catapult { namespace observers {
 			// Arrange:
 			auto cache = CreateSimpleCatapultCache();
 			auto cacheDelta = cache.createDelta();
-			state::CatapultState state;
-			ObserverContext context({ cacheDelta, state }, height, mode, model::ResolverContext());
+			ObserverContext context(ObserverState(cacheDelta), height, mode, model::ResolverContext());
 
 			// Act:
 			NotifyBlock(observer, context);
@@ -245,8 +243,7 @@ namespace catapult { namespace observers {
 			// Arrange:
 			auto cache = CreateSimpleCatapultCache();
 			auto cacheDelta = cache.createDelta();
-			state::CatapultState state;
-			ObserverContext context({ cacheDelta, state }, height, mode, model::ResolverContext());
+			ObserverContext context(ObserverState(cacheDelta), height, mode, model::ResolverContext());
 
 			// Act:
 			NotifyBlock(observer, context);
@@ -263,8 +260,7 @@ namespace catapult { namespace observers {
 			// Arrange:
 			auto cache = CreateSimpleCatapultCache();
 			auto cacheDelta = cache.createDelta();
-			state::CatapultState state;
-			ObserverContext context({ cacheDelta, state }, height, mode, model::ResolverContext());
+			ObserverContext context(ObserverState(cacheDelta), height, mode, model::ResolverContext());
 
 			// Act:
 			NotifyBlock(observer, context, timestamp);
@@ -405,29 +401,6 @@ namespace catapult { namespace observers {
 	namespace {
 		constexpr auto Receipt_Type_Marker = static_cast<model::ReceiptType>(0xA5A5);
 
-		void AssertNoTouching(const PruningObserver& observer, NotifyMode mode, Height observerHeight) {
-			// Arrange:
-			auto cache = CreateSimpleCatapultCache();
-			auto cacheDelta = cache.createDelta();
-			state::CatapultState state;
-			model::BlockStatementBuilder statementBuilder;
-			ObserverContext context({ cacheDelta, state, statementBuilder }, observerHeight, mode, model::ResolverContext());
-
-			// Act:
-			NotifyBlock(observer, context);
-			const auto& subCache = cache.sub<PrunableCache>();
-
-			// Assert:
-			auto message = CreateMessage(mode, observerHeight);
-			EXPECT_TRUE(subCache.pruneHeights().empty()) << message;
-			EXPECT_TRUE(subCache.pruneTimes().empty()) << message;
-			EXPECT_TRUE(subCache.touchHeights().empty()) << message;
-
-			// - check receipts
-			auto pStatement = statementBuilder.build();
-			EXPECT_EQ(0u, pStatement->TransactionStatements.size());
-		}
-
 		void AssertTouching(
 				const PruningObserver& observer,
 				NotifyMode mode,
@@ -437,9 +410,8 @@ namespace catapult { namespace observers {
 			// Arrange:
 			auto cache = CreateSimpleCatapultCache();
 			auto cacheDelta = cache.createDelta();
-			state::CatapultState state;
 			model::BlockStatementBuilder statementBuilder;
-			ObserverContext context({ cacheDelta, state, statementBuilder }, observerHeight, mode, model::ResolverContext());
+			ObserverContext context(ObserverState(cacheDelta, statementBuilder), observerHeight, mode, model::ResolverContext());
 
 			// Act:
 			NotifyBlock(observer, context);
@@ -517,46 +489,28 @@ namespace catapult { namespace observers {
 		EXPECT_EQ("FooTouchObserver", pObserver->name());
 	}
 
-	namespace {
-		void AssertNonzeroGracePeriodCacheBlockTouchObserverDoesNotTouchWhenHeightIsNotGreaterThanGracePeriod(NotifyMode mode) {
-			// Arrange:
-			auto pObserver = CreateCacheBlockTouchObserver<PrunableCache>("Foo", Receipt_Type_Marker, BlockDuration(100));
-
-			// Act + Assert:
-			AssertNoTouching(*pObserver, mode, Height(1));
-			AssertNoTouching(*pObserver, mode, Height(99));
-			AssertNoTouching(*pObserver, mode, Height(100));
-		}
-	}
-
-	TEST(TEST_CLASS, NonzeroGracePeriod_CacheBlockTouchObserverDoesNotTouchWhenHeightIsNotGreaterThanGracePeriod_Commit) {
-		AssertNonzeroGracePeriodCacheBlockTouchObserverDoesNotTouchWhenHeightIsNotGreaterThanGracePeriod(NotifyMode::Commit);
-	}
-
-	TEST(TEST_CLASS, NonzeroGracePeriod_CacheBlockTouchObserverDoesNotTouchWhenHeightIsNotGreaterThanGracePeriod_Rollback) {
-		AssertNonzeroGracePeriodCacheBlockTouchObserverDoesNotTouchWhenHeightIsNotGreaterThanGracePeriod(NotifyMode::Rollback);
-	}
-
-	TEST(TEST_CLASS, NonzeroGracePeriod_CacheBlockTouchObserverTouchesWhenHeightIsGreaterThanGracePeriod_Commit) {
+	TEST(TEST_CLASS, NonzeroGracePeriod_CacheBlockTouchObserverTouches_Commit) {
 		// Arrange:
-		auto pObserver = CreateCacheBlockTouchObserver<PrunableCache>("Foo", Receipt_Type_Marker, BlockDuration(100));
+		auto pObserver = CreateCacheBlockTouchObserver<PrunableCache>("Foo", Receipt_Type_Marker, BlockDuration(10));
 
 		// Act + Assert:
 		auto mode = NotifyMode::Commit;
-		AssertTouching(*pObserver, mode, Height(101), Height(1), {});
-		AssertTouching(*pObserver, mode, Height(111), Height(11), { 10 });
-		AssertTouching(*pObserver, mode, Height(150), Height(50), { 10, 20, 30, 40 });
+		AssertTouching(*pObserver, mode, Height(1), Height(11), { 10 });
+		AssertTouching(*pObserver, mode, Height(11), Height(21), { 10, 20 });
+		AssertTouching(*pObserver, mode, Height(43), Height(53), { 10, 20, 30, 40, 50 });
+		AssertTouching(*pObserver, mode, Height(90), Height(100), { 10, 20, 30, 40, 50, 60, 70, 80, 90 });
 	}
 
-	TEST(TEST_CLASS, NonzeroGracePeriod_CacheBlockTouchObserverTouchesWhenHeightIsGreaterThanGracePeriod_Rollback) {
+	TEST(TEST_CLASS, NonzeroGracePeriod_CacheBlockTouchObserverTouches_Rollback) {
 		// Arrange:
-		auto pObserver = CreateCacheBlockTouchObserver<PrunableCache>("Foo", Receipt_Type_Marker, BlockDuration(100));
+		auto pObserver = CreateCacheBlockTouchObserver<PrunableCache>("Foo", Receipt_Type_Marker, BlockDuration(10));
 
 		// Act + Assert:
 		auto mode = NotifyMode::Rollback;
-		AssertTouching(*pObserver, mode, Height(101), Height(1));
-		AssertTouching(*pObserver, mode, Height(111), Height(11));
-		AssertTouching(*pObserver, mode, Height(150), Height(50));
+		AssertTouching(*pObserver, mode, Height(1), Height(11));
+		AssertTouching(*pObserver, mode, Height(11), Height(21));
+		AssertTouching(*pObserver, mode, Height(43), Height(53));
+		AssertTouching(*pObserver, mode, Height(90), Height(100));
 	}
 
 	// endregion

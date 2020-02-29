@@ -20,6 +20,7 @@
 
 #include "catapult/extensions/ProcessBootstrapper.h"
 #include "catapult/plugins/PluginExceptions.h"
+#include "catapult/utils/HexParser.h"
 #include "tests/test/local/LocalTestUtils.h"
 #include "tests/test/nodeps/Filesystem.h"
 #include "tests/test/other/MutableCatapultConfiguration.h"
@@ -35,7 +36,7 @@ namespace catapult { namespace extensions {
 		// Arrange:
 		auto config = test::CreateUninitializedCatapultConfiguration();
 		const_cast<uint32_t&>(config.BlockChain.BlockPruneInterval) = 15;
-		const_cast<bool&>(config.Node.ShouldUseCacheDatabaseStorage) = true;
+		const_cast<bool&>(config.Node.EnableCacheDatabaseStorage) = true;
 		const_cast<std::string&>(config.User.DataDirectory) = "base_data_dir";
 
 		// Act:
@@ -147,9 +148,29 @@ namespace catapult { namespace extensions {
 
 	// region staticNodes + AddStaticNodesFromPath
 
+	namespace {
+		constexpr auto Generation_Hash_String = "272C4ECC55B7A42A07478A9550543C62673D1599A8362CC662E019049B76B7F2";
+
+		auto CreateCatapultConfigurationWithCustomNetworkFingerprint() {
+			test::MutableCatapultConfiguration config;
+			config.BlockChain.Network.Identifier = model::NetworkIdentifier::Mijin_Test;
+			config.BlockChain.Network.GenerationHash = utils::ParseByteArray<GenerationHash>(Generation_Hash_String);
+			return config.ToConst();
+		}
+
+		void AssertStaticNode(const ionet::Node& node, const Key& expectedPublicKey, const std::string& tag) {
+			EXPECT_EQ(expectedPublicKey, node.identity().PublicKey) << tag;
+			EXPECT_EQ("127.0.0.1", node.identity().Host) << tag;
+
+			// test::CreateLocalHostNode creates nodes with default network fingerprint and addStaticNodes doesn't override fingerprint
+			EXPECT_EQ(model::NetworkIdentifier::Zero, node.metadata().NetworkFingerprint.Identifier) << tag;
+			EXPECT_EQ(GenerationHash(), node.metadata().NetworkFingerprint.GenerationHash) << tag;
+		}
+	}
+
 	TEST(TEST_CLASS, CanAddStaticNodes) {
 		// Arrange:
-		auto bootstrapper = CreateBootstrapper(test::CreateUninitializedCatapultConfiguration());
+		auto bootstrapper = CreateBootstrapper(CreateCatapultConfigurationWithCustomNetworkFingerprint());
 
 		// - add five nodes
 		std::vector<ionet::Node> nodes1{
@@ -172,21 +193,25 @@ namespace catapult { namespace extensions {
 		ASSERT_EQ(5u, bootstrapperNodes.size());
 
 		for (auto i = 0u; i < nodes1.size(); ++i)
-			EXPECT_EQ(bootstrapperNodes[i], nodes1[i]) << "nodes1 at " << i;
+			AssertStaticNode(bootstrapperNodes[i], nodes1[i].identity().PublicKey, "nodes1 at " + std::to_string(i));
 
 		for (auto i = 0u; i < nodes2.size(); ++i)
-			EXPECT_EQ(bootstrapperNodes[nodes1.size() + i], nodes2[i]) << "nodes2 at " << i;
+			AssertStaticNode(bootstrapperNodes[nodes1.size() + i], nodes2[i].identity().PublicKey, "nodes2 at " + std::to_string(i));
 	}
 
 	TEST(TEST_CLASS, CanAddStaticNodesFromPath) {
 		// Arrange:
-		auto bootstrapper = CreateBootstrapper(test::CreateUninitializedCatapultConfiguration());
+		auto bootstrapper = CreateBootstrapper(CreateCatapultConfigurationWithCustomNetworkFingerprint());
 
 		// Act:
 		AddStaticNodesFromPath(bootstrapper, "../resources/peers-p2p.json");
 
 		// Assert:
-		EXPECT_EQ(1u, bootstrapper.staticNodes().size());
+		ASSERT_EQ(1u, bootstrapper.staticNodes().size());
+
+		const auto& node = bootstrapper.staticNodes()[0];
+		EXPECT_EQ(model::NetworkIdentifier::Mijin_Test, node.metadata().NetworkFingerprint.Identifier);
+		EXPECT_EQ(utils::ParseByteArray<GenerationHash>(Generation_Hash_String), node.metadata().NetworkFingerprint.GenerationHash);
 	}
 
 	// endregion

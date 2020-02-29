@@ -26,6 +26,8 @@
 #include "RepairState.h"
 #include "StateChangeRepairingSubscriber.h"
 #include "StorageStart.h"
+#include "catapult/cache/ReadOnlyCatapultCache.h"
+#include "catapult/chain/BlockExecutor.h"
 #include "catapult/config/CatapultDataDirectory.h"
 #include "catapult/extensions/LocalNodeChainScore.h"
 #include "catapult/extensions/LocalNodeStateFileStorage.h"
@@ -35,6 +37,7 @@
 #include "catapult/io/FilesystemUtils.h"
 #include "catapult/io/MoveBlockFiles.h"
 #include "catapult/local/HostUtils.h"
+#include "catapult/observers/NotificationObserverAdapter.h"
 #include "catapult/subscribers/BlockChangeReader.h"
 #include "catapult/subscribers/BrokerMessageReaders.h"
 #include "catapult/subscribers/TransactionStatusReader.h"
@@ -84,15 +87,16 @@ namespace catapult { namespace local {
 			serializer.moveTo(dataDirectory.dir("state"));
 		}
 
-		void MoveBlockFiles(const config::CatapultDirectory& stagingDirectory, io::BlockStorage& destinationStorage) {
+		Height MoveBlockFiles(const config::CatapultDirectory& stagingDirectory, io::BlockStorage& destinationStorage) {
 			io::FileBlockStorage staging(stagingDirectory.str());
 			if (Height(0) == staging.chainHeight())
-				return;
+				return Height(0);
 
 			// mind that startHeight will be > 1, so there is no additional check
 			auto startHeight = FindStartHeight(staging);
 			CATAPULT_LOG(debug) << "moving blocks: " << startHeight << "-" << staging.chainHeight();
 			io::MoveBlockFiles(staging, destinationStorage, startHeight);
+			return startHeight;
 		}
 
 		class DefaultRecoveryOrchestrator final : public RecoveryOrchestrator {
@@ -107,6 +111,7 @@ namespace catapult { namespace local {
 					, m_pTransactionStatusSubscriber(m_pBootstrapper->subscriptionManager().createTransactionStatusSubscriber())
 					, m_pStateChangeSubscriber(m_pBootstrapper->subscriptionManager().createStateChangeSubscriber())
 					, m_pluginManager(m_pBootstrapper->pluginManager())
+					, m_stateSavingRequired(true)
 			{}
 
 			~DefaultRecoveryOrchestrator() override {
@@ -140,7 +145,7 @@ namespace catapult { namespace local {
 				if (heights.Cache > heights.Storage)
 					CATAPULT_THROW_RUNTIME_ERROR_2("cache height is larger than storage height", heights.Cache, heights.Storage);
 
-				if (!stateRef().Config.Node.ShouldUseCacheDatabaseStorage)
+				if (!stateRef().Config.Node.EnableCacheDatabaseStorage)
 					repairStateFromStorage(heights);
 
 				CATAPULT_LOG(info) << "loaded block chain (height = " << heights.Storage << ", score = " << m_score.get() << ")";
@@ -173,7 +178,7 @@ namespace catapult { namespace local {
 					return;
 
 				// disable load optimizations (loading from the saved state is optimization enough) in order to prevent
-				// discontinuities in block analysis (e.g. difficulty cache expects consecutive blocks)
+				// discontinuities in block analysis (e.g. statistic cache expects consecutive blocks)
 				CATAPULT_LOG(info) << "loading state - block loading required";
 				auto observerFactory = [&pluginManager = m_pluginManager](const auto&) { return pluginManager.createObserver(); };
 				auto partialScore = LoadBlockChain(observerFactory, m_pluginManager, stateRef(), heights.Cache + Height(1));
@@ -184,14 +189,14 @@ namespace catapult { namespace local {
 				// RepairState always needs to be called in order to recover broker messages
 				std::unique_ptr<subscribers::StateChangeSubscriber> pStateChangeRepairSubscriber;
 				std::unique_ptr<subscribers::StateChangeSubscriber> pDualStateChangeSubscriber;
-				if (stateRef().Config.Node.ShouldUseCacheDatabaseStorage) {
+				if (stateRef().Config.Node.EnableCacheDatabaseStorage) {
 					pStateChangeRepairSubscriber = CreateStateChangeRepairingSubscriber(stateRef().Cache, stateRef().Score);
 					pDualStateChangeSubscriber = std::make_unique<DualStateChangeSubscriber>(
 							*pStateChangeRepairSubscriber,
 							*m_pStateChangeSubscriber);
 				}
 
-				auto& repairSubscriber = stateRef().Config.Node.ShouldUseCacheDatabaseStorage
+				auto& repairSubscriber = stateRef().Config.Node.EnableCacheDatabaseStorage
 						? *pDualStateChangeSubscriber
 						: *m_pStateChangeSubscriber;
 				RepairState(m_dataDirectory.spoolDir("state_change"), stateRef().Cache, *m_pStateChangeSubscriber, repairSubscriber);
@@ -204,7 +209,46 @@ namespace catapult { namespace local {
 
 				CATAPULT_LOG(debug) << " - moving supplemental data and block files";
 				MoveSupplementalDataFiles(m_dataDirectory);
-				MoveBlockFiles(m_dataDirectory.spoolDir("block_sync"), *m_pBlockStorage);
+				auto startHeight = MoveBlockFiles(m_dataDirectory.spoolDir("block_sync"), *m_pBlockStorage);
+
+				// when verifiable state is enabled, forcibly regenerate all patricia trees because cache changes are coalesced
+				if (stateRef().Config.BlockChain.EnableVerifiableState && startHeight > Height(0)) {
+					CATAPULT_LOG(debug) << "- reloading supplemental state";
+					extensions::LoadDependentStateFromDirectory(m_dataDirectory.dir("state"), stateRef().Cache);
+					reapplyBlocks(startHeight);
+				}
+
+				// when cache database storage is enabled and State_Written,
+				// cache database and supplemental data are updated by repairState
+				m_stateSavingRequired = !stateRef().Config.Node.EnableCacheDatabaseStorage;
+			}
+
+			void reapplyBlocks(Height startHeight) {
+				auto chainHeight = m_pBlockStorage->chainHeight();
+				CATAPULT_LOG(info) << "reapplying blocks to regenerate patricia trees " << startHeight << "-" << chainHeight;
+
+				auto cacheDelta = stateRef().Cache.createDelta();
+				auto observerState = observers::ObserverState(cacheDelta);
+
+				auto readOnlyCache = cacheDelta.toReadOnly();
+				auto resolverContext = m_pluginManager.createResolverContext(readOnlyCache);
+
+				observers::NotificationObserverAdapter observer(
+						m_pluginManager.createObserver(),
+						m_pluginManager.createNotificationPublisher());
+				chain::BlockExecutionContext executionContext{ observer, resolverContext, observerState };
+
+				CATAPULT_LOG(debug) << " - rolling back blocks";
+				for (auto height = chainHeight; height >= startHeight; height = height - Height(1))
+					chain::RollbackBlock(*m_pBlockStorage->loadBlockElement(height), executionContext);
+
+				CATAPULT_LOG(debug) << " - executing blocks";
+				for (auto height = startHeight; height <= chainHeight; height = height + Height(1)) {
+					chain::ExecuteBlock(*m_pBlockStorage->loadBlockElement(height), executionContext);
+					cacheDelta.calculateStateHash(height); // force recalculation of patricia tree
+				}
+
+				stateRef().Cache.commit(chainHeight);
 			}
 
 		public:
@@ -217,8 +261,15 @@ namespace catapult { namespace local {
 
 		private:
 			void saveStateToDisk() {
+				if (!m_stateSavingRequired) {
+					// just write the commit step file that was deleted during recover
+					io::IndexFile commitStepFile(m_dataDirectory.rootDir().file("commit_step.dat"));
+					commitStepFile.set(utils::to_underlying_type(consumers::CommitOperationStep::All_Updated));
+					return;
+				}
+
 				constexpr auto SaveStateToDirectoryWithCheckpointing = extensions::SaveStateToDirectoryWithCheckpointing;
-				SaveStateToDirectoryWithCheckpointing(m_dataDirectory, m_config.Node, m_catapultCache, m_catapultState, m_score.get());
+				SaveStateToDirectoryWithCheckpointing(m_dataDirectory, m_config.Node, m_catapultCache, m_score.get());
 			}
 
 		public:
@@ -228,7 +279,7 @@ namespace catapult { namespace local {
 
 		private:
 			extensions::LocalNodeStateRef stateRef() {
-				return extensions::LocalNodeStateRef(m_config, m_catapultState, m_catapultCache, m_storage, m_score);
+				return extensions::LocalNodeStateRef(m_config, m_catapultCache, m_storage, m_score);
 			}
 
 		private:
@@ -241,7 +292,6 @@ namespace catapult { namespace local {
 			config::CatapultDataDirectory m_dataDirectory;
 
 			cache::CatapultCache m_catapultCache;
-			state::CatapultState m_catapultState;
 			std::unique_ptr<io::BlockStorage> m_pBlockStorage;
 			io::BlockStorageCache m_storage;
 			extensions::LocalNodeChainScore m_score;
@@ -250,6 +300,7 @@ namespace catapult { namespace local {
 			std::unique_ptr<subscribers::StateChangeSubscriber> m_pStateChangeSubscriber;
 
 			plugins::PluginManager& m_pluginManager;
+			bool m_stateSavingRequired;
 		};
 	}
 

@@ -38,21 +38,21 @@ namespace catapult { namespace model {
 		static constexpr uint32_t Max_Data_Size = 0x00FFFFFF;
 
 	public:
-		/// Cache entry's id.
-		TIdentifier Id;
-
 		/// Size of the entry data.
 		uint32_t DataSize;
+
+		/// Cache entry's id.
+		TIdentifier Id;
 
 		// followed by data if DataSize > 0
 
 	public:
-		/// Returns a const pointer to the first data byte in this cache entry info.
+		/// Gets a const pointer to the first data byte in this cache entry info.
 		const uint8_t* DataPtr() const {
 			return DataSize ? ToTypedPointer(PayloadStart(*this)) : nullptr;
 		}
 
-		/// Returns a pointer to the first data byte in this cache entry info.
+		/// Gets a pointer to the first data byte in this cache entry info.
 		uint8_t* DataPtr() {
 			return DataSize ? ToTypedPointer(PayloadStart(*this)) : nullptr;
 		}

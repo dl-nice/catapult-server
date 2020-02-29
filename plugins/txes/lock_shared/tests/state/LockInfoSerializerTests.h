@@ -29,15 +29,15 @@ namespace catapult { namespace state {
 
 #pragma pack(push, 1)
 
-	/// A packed lock info.
+	/// Packed lock info.
 	struct PackedLockInfo {
 	public:
 		/// Creates a lock info from \a lockInfo.
 		explicit PackedLockInfo(const LockInfo& lockInfo)
-				: Account(lockInfo.Account)
+				: Account(lockInfo.SenderPublicKey)
 				, MosaicId(lockInfo.MosaicId)
 				, Amount(lockInfo.Amount)
-				, Height(lockInfo.Height)
+				, Height(lockInfo.EndHeight)
 				, Status(lockInfo.Status)
 		{}
 

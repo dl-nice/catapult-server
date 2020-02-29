@@ -21,7 +21,7 @@
 #pragma once
 #include "src/state/MosaicRestrictionEntry.h"
 #include "catapult/cache/ReadOnlyArtifactCache.h"
-#include "catapult/model/NetworkInfo.h"
+#include "catapult/model/NetworkIdentifier.h"
 
 namespace catapult {
 	namespace cache {
@@ -38,7 +38,7 @@ namespace catapult { namespace cache {
 		Hash256,
 		state::MosaicRestrictionEntry>;
 
-	/// A read-only overlay on top of a mosaic restriction cache.
+	/// Read-only overlay on top of a mosaic restriction cache.
 	class ReadOnlyMosaicRestrictionCache : public ReadOnlyMosaicRestrictionArtifactCache {
 	public:
 		/// Creates a read-only overlay on top of \a cache.

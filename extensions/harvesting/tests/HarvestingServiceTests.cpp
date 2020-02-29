@@ -21,11 +21,17 @@
 #include "harvesting/src/HarvestingService.h"
 #include "harvesting/src/HarvestingConfiguration.h"
 #include "harvesting/src/UnlockedAccounts.h"
-#include "catapult/cache_core/BlockDifficultyCache.h"
+#include "harvesting/src/UnlockedAccountsStorage.h"
+#include "catapult/cache_core/BlockStatisticCache.h"
+#include "catapult/config/CatapultDataDirectory.h"
+#include "harvesting/tests/test/UnlockedTestEntry.h"
 #include "tests/test/cache/CacheTestUtils.h"
+#include "tests/test/core/HandlersTrustedHostTests.h"
+#include "tests/test/core/PacketPayloadTestUtils.h"
 #include "tests/test/local/ServiceLocatorTestContext.h"
 #include "tests/test/local/ServiceTestUtils.h"
 #include "tests/test/nodeps/Filesystem.h"
+#include "tests/test/nodeps/Functional.h"
 #include "tests/TestHarness.h"
 
 namespace catapult { namespace harvesting {
@@ -35,14 +41,14 @@ namespace catapult { namespace harvesting {
 	namespace {
 		constexpr auto Service_Name = "unlockedAccounts";
 		constexpr auto Task_Name = "harvesting task";
-		constexpr auto Harvester_Key = "0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF";
+		constexpr auto Harvester_Private_Key = "0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF";
 
-		HarvestingConfiguration CreateHarvestingConfiguration(bool autoHarvest) {
+		HarvestingConfiguration CreateHarvestingConfiguration(test::LocalNodeFlags flags = test::LocalNodeFlags::None) {
 			auto config = HarvestingConfiguration::Uninitialized();
-			config.HarvestKey = Harvester_Key;
-			config.IsAutoHarvestingEnabled = autoHarvest;
+			config.HarvesterPrivateKey = Harvester_Private_Key;
+			config.EnableAutoHarvesting = test::LocalNodeFlags::Should_Auto_Harvest == flags;
 			config.MaxUnlockedAccounts = 10;
-			config.Beneficiary = std::string(64, '0');
+			config.BeneficiaryPublicKey = std::string(64, '0');
 			return config;
 		}
 
@@ -62,34 +68,51 @@ namespace catapult { namespace harvesting {
 
 		public:
 			explicit TestContext(test::LocalNodeFlags flags = test::LocalNodeFlags::None)
-					: m_config(CreateHarvestingConfiguration(test::LocalNodeFlags::Should_Auto_Harvest == flags)) {
+					: TestContext(CreateHarvestingConfiguration(flags))
+			{}
+
+			explicit TestContext(const HarvestingConfiguration& config)
+					: BaseType(test::CreateEmptyCatapultCache(test::CreatePrototypicalBlockChainConfiguration()))
+					, m_config(config) {
 				setHooks();
 			}
 
-			explicit TestContext(cache::CatapultCache&& cache, const supplier<Timestamp>& timeSupplier = &utils::NetworkTime)
+			explicit TestContext(
+					cache::CatapultCache&& cache,
+					const supplier<Timestamp>& timeSupplier = test::CreateDefaultNetworkTimeSupplier())
 					: BaseType(std::move(cache), timeSupplier)
-					, m_config(CreateHarvestingConfiguration(false)) {
+					, m_config(CreateHarvestingConfiguration()) {
 				setHooks();
 			}
 
 		public:
 			Key harvesterKey() const {
-				return crypto::KeyPair::FromString(m_config.HarvestKey).publicKey();
+				return crypto::KeyPair::FromString(m_config.HarvesterPrivateKey).publicKey();
 			}
 
 			const auto& capturedStateHashes() const {
 				return m_capturedStateHashes;
 			}
 
-			const auto& capturedSourcePublicKeys() const {
-				return m_capturedSourcePublicKeys;
+			const auto& capturedSourceIdentities() const {
+				return m_capturedSourceIdentities;
 			}
 
 		public:
 			void enableVerifiableState() {
 				auto& config = testState().state().config();
-				const_cast<bool&>(config.Node.ShouldUseCacheDatabaseStorage) = true;
-				const_cast<bool&>(config.BlockChain.ShouldEnableVerifiableState) = true;
+				const_cast<bool&>(config.Node.EnableCacheDatabaseStorage) = true;
+				const_cast<bool&>(config.BlockChain.EnableVerifiableState) = true;
+			}
+
+			void enableDiagnosticExtension() {
+				auto& config = testState().state().config();
+				const_cast<std::vector<std::string>&>(config.Extensions.Names).push_back("extension.diagnostics");
+			}
+
+			void setDataDirectory(const std::string& dataDirectory) {
+				auto& config = testState().state().config();
+				const_cast<std::string&>(config.User.DataDirectory) = dataDirectory;
 			}
 
 		public:
@@ -101,13 +124,13 @@ namespace catapult { namespace harvesting {
 			void setHooks() {
 				// set up hooks
 				auto& capturedStateHashes = m_capturedStateHashes;
-				auto& capturedSourcePublicKeys = m_capturedSourcePublicKeys;
+				auto& capturedSourceIdentities = m_capturedSourceIdentities;
 				testState().state().hooks().setCompletionAwareBlockRangeConsumerFactory([&](auto) {
 					return [&](auto&& blockRange, auto) {
 						for (const auto& block : blockRange.Range)
 							capturedStateHashes.push_back(block.StateHash);
 
-						capturedSourcePublicKeys.push_back(blockRange.SourcePublicKey);
+						capturedSourceIdentities.push_back(blockRange.SourceIdentity);
 						return disruptor::DisruptorElementId();
 					};
 				});
@@ -116,7 +139,7 @@ namespace catapult { namespace harvesting {
 		private:
 			HarvestingConfiguration m_config;
 			std::vector<Hash256> m_capturedStateHashes;
-			std::vector<Key> m_capturedSourcePublicKeys;
+			std::vector<model::NodeIdentity> m_capturedSourceIdentities;
 		};
 
 		std::shared_ptr<UnlockedAccounts> GetUnlockedAccounts(const extensions::ServiceLocator& locator) {
@@ -130,10 +153,7 @@ namespace catapult { namespace harvesting {
 
 	namespace {
 		template<typename TAction>
-		void RunUnlockedAccountsServiceTest(test::LocalNodeFlags localNodeFlags, TAction action) {
-			// Arrange:
-			TestContext context(localNodeFlags);
-
+		void RunUnlockedAccountsServiceTest(TestContext& context, TAction action) {
 			// Act:
 			context.boot();
 
@@ -143,25 +163,247 @@ namespace catapult { namespace harvesting {
 
 			auto pUnlockedAccounts = GetUnlockedAccounts(context.locator());
 			ASSERT_TRUE(!!pUnlockedAccounts);
-			action(*pUnlockedAccounts, context);
+			action(*pUnlockedAccounts);
 		}
 	}
 
 	TEST(TEST_CLASS, UnlockedAccountsServiceIsRegisteredProperlyWhenAutoHarvestingIsEnabled) {
 		// Arrange:
-		RunUnlockedAccountsServiceTest(test::LocalNodeFlags::Should_Auto_Harvest, [](const auto& accounts, const auto& context) {
+		TestContext context(test::LocalNodeFlags::Should_Auto_Harvest);
+		RunUnlockedAccountsServiceTest(context, [&context](const auto& unlockedAccounts) {
 			// Assert: a single account was unlocked
-			EXPECT_TRUE(accounts.view().contains(context.harvesterKey()));
 			EXPECT_EQ(1u, context.counter("UNLKED ACCTS"));
+			EXPECT_TRUE(unlockedAccounts.view().contains(context.harvesterKey()));
 		});
 	}
 
 	TEST(TEST_CLASS, UnlockedAccountsServiceIsRegisteredProperlyWhenAutoHarvestingIsDisabled) {
 		// Arrange:
-		RunUnlockedAccountsServiceTest(test::LocalNodeFlags::None, [](const auto& accounts, const auto& context) {
+		TestContext context(test::LocalNodeFlags::None);
+		RunUnlockedAccountsServiceTest(context, [&context](const auto& unlockedAccounts) {
 			// Assert: no accounts were unlocked
-			EXPECT_FALSE(accounts.view().contains(context.harvesterKey()));
 			EXPECT_EQ(0u, context.counter("UNLKED ACCTS"));
+			EXPECT_FALSE(unlockedAccounts.view().contains(context.harvesterKey()));
+		});
+	}
+
+	TEST(TEST_CLASS, UnlockedAccountsServiceIsRegisteredProperlyWhenAutoHarvestingIsDisabledAndHarvesterPrivateKeyIsEmpty) {
+		// Arrange:
+		auto config = CreateHarvestingConfiguration();
+		config.HarvesterPrivateKey.clear();
+
+		TestContext context(config);
+		RunUnlockedAccountsServiceTest(context, [&context](const auto&) {
+			// Assert: no accounts were unlocked
+			EXPECT_EQ(0u, context.counter("UNLKED ACCTS"));
+		});
+	}
+
+	namespace {
+		auto CreateKeyPairs(size_t numKeyPairs) {
+			std::vector<crypto::KeyPair> keyPairs;
+			for (auto i = 0u; i < numKeyPairs; ++i)
+				keyPairs.push_back(test::GenerateKeyPair());
+
+			return keyPairs;
+		}
+
+		void AddAccounts(
+				TestContext& context,
+				const std::vector<crypto::KeyPair>& keyPairs,
+				const consumer<state::AccountState&>& accountStateModifier = [](const auto&) {}) {
+			auto& cache = context.testState().state().cache();
+			auto cacheDelta = cache.createDelta();
+			auto& accountStateCacheDelta = cacheDelta.sub<cache::AccountStateCache>();
+
+			for (const auto& keyPair : keyPairs) {
+				const auto& publicKey = keyPair.publicKey();
+				accountStateCacheDelta.addAccount(publicKey, Height(100));
+				accountStateModifier(accountStateCacheDelta.find(publicKey).get());
+			}
+
+			cache.commit(Height(100));
+		}
+
+		std::vector<crypto::KeyPair> AddAccountsWithImportances(TestContext& context, const std::vector<Importance>& importances) {
+			auto keyPairs = CreateKeyPairs(importances.size());
+			auto iter = importances.cbegin();
+			AddAccounts(context, keyPairs, [iter](auto& accountState) mutable {
+				accountState.ImportanceSnapshots.set(*iter, model::ImportanceHeight(100));
+				++iter;
+			});
+
+			return keyPairs;
+		}
+
+		void RunUnlockedAccountsPrioritizationTest(
+				DelegatePrioritizationPolicy prioritizationPolicy,
+				std::initializer_list<size_t> expectedIndexes) {
+			// Arrange:
+			auto config = CreateHarvestingConfiguration(test::LocalNodeFlags::Should_Auto_Harvest);
+			config.MaxUnlockedAccounts = 5;
+			config.DelegatePrioritizationPolicy = prioritizationPolicy;
+
+			TestContext context(config);
+			auto keyPairs = AddAccountsWithImportances(context, {
+				Importance(100), Importance(200), Importance(50), Importance(150), Importance(250)
+			});
+
+			RunUnlockedAccountsServiceTest(context, [&expectedIndexes, &context, &keyPairs](auto& unlockedAccounts) {
+				// Act:
+				std::vector<Key> publicKeys;
+				for (auto& keyPair : keyPairs) {
+					publicKeys.push_back(keyPair.publicKey());
+					unlockedAccounts.modifier().add(std::move(keyPair));
+				}
+
+				// Assert:
+				EXPECT_EQ(5u, context.counter("UNLKED ACCTS"));
+
+				auto unlockedAccountsView = unlockedAccounts.view();
+				EXPECT_TRUE(unlockedAccountsView.contains(context.harvesterKey()));
+				for (auto i : expectedIndexes)
+					EXPECT_TRUE(unlockedAccountsView.contains(publicKeys[i])) << "public key " << i;
+			});
+		}
+	}
+
+	TEST(TEST_CLASS, UnlockedAccountsServiceIsRegisteredProperlyWhenAutoHarvestingIsEnabledWithAgePrioritizationPolicy) {
+		RunUnlockedAccountsPrioritizationTest(DelegatePrioritizationPolicy::Age, { 0, 1, 2, 3 });
+	}
+
+	TEST(TEST_CLASS, UnlockedAccountsServiceIsRegisteredProperlyWhenAutoHarvestingIsEnabledWithImportancePrioritizationPolicy) {
+		RunUnlockedAccountsPrioritizationTest(DelegatePrioritizationPolicy::Importance, { 0, 1, 3, 4 });
+	}
+
+	namespace {
+		void AddHarvestersFileEntries(const std::string& filename, const Key& nodeOwnerPublicKey, size_t numEntries) {
+			UnlockedAccountsStorage storage(filename);
+			for (auto i = 0u; i < numEntries; ++i) {
+				auto privateKeyBuffer = test::GenerateRandomByteArray<Key>();
+				auto entry = test::PrepareUnlockedTestEntry(nodeOwnerPublicKey, privateKeyBuffer);
+				storage.add(test::GetMessageIdentifier(entry), entry.Payload, Key{ { static_cast<uint8_t>(i) } });
+			}
+		}
+	}
+
+	TEST(TEST_CLASS, UnlockedAccountsServiceIsLoadingUnlockedHarvestersFile) {
+		// Arrange:
+		test::TempDirectoryGuard directoryGuard;
+		TestContext context(test::LocalNodeFlags::None);
+		context.setDataDirectory(directoryGuard.name());
+
+		auto filename = config::CatapultDataDirectory(directoryGuard.name()).rootDir().file("harvesters.dat");
+		AddHarvestersFileEntries(filename, context.locator().keyPair().publicKey(), 3);
+
+		RunUnlockedAccountsServiceTest(context, [&context](const auto& unlockedAccounts) {
+			// Assert: only accounts from the file were unlocked
+			EXPECT_EQ(3u, context.counter("UNLKED ACCTS"));
+			EXPECT_FALSE(unlockedAccounts.view().contains(context.harvesterKey()));
+		});
+	}
+
+	// endregion
+
+	// region packet handler
+
+	TEST(TEST_CLASS, PacketHandlerIsNotRegisteredWhenDiagnosticExtensionIsDisabled) {
+		// Arrange:
+		TestContext context;
+
+		// Act:
+		context.boot();
+
+		// Assert:
+		EXPECT_EQ(0u, context.testState().state().packetHandlers().size());
+	}
+
+	TEST(TEST_CLASS, PacketHandlerIsRegisteredWhenDiagnosticExtensionIsEnabled) {
+		// Arrange:
+		TestContext context;
+		context.enableDiagnosticExtension();
+
+		// Act:
+		context.boot();
+
+		// Assert:
+		const auto& packetHandlers = context.testState().state().packetHandlers();
+		EXPECT_EQ(1u, packetHandlers.size());
+		EXPECT_TRUE(packetHandlers.canProcess(ionet::PacketType::Unlocked_Accounts));
+	}
+
+	namespace {
+		class DiagnosticEnabledTestContext : public TestContext {
+		public:
+			DiagnosticEnabledTestContext() {
+				enableDiagnosticExtension();
+			}
+		};
+	}
+
+	ADD_HANDLERS_TRUSTED_HOSTS_TESTS(DiagnosticEnabledTestContext, ionet::PacketType::Unlocked_Accounts)
+
+	namespace {
+		auto GetPublicKeys(const std::vector<crypto::KeyPair>& keyPairs) {
+			auto keys = test::Apply(true, keyPairs, [](const auto& keyPair) { return keyPair.publicKey(); });
+			return std::set<Key>(keys.cbegin(), keys.cend());
+		}
+
+		void AssertPacketHandlerReturnsUnlockedAccounts(
+				std::vector<crypto::KeyPair>&& keyPairs,
+				const consumer<const ionet::ServerPacketHandlerContext&>& assertPacket) {
+			// Arrange:
+			auto config = CreateHarvestingConfiguration(test::LocalNodeFlags::None);
+
+			TestContext context(config);
+			AddAccounts(context, keyPairs);
+			context.enableDiagnosticExtension();
+			context.boot();
+
+			// - add key pairs to unlocked accounts
+			auto pUnlockedAccounts = GetUnlockedAccounts(context.locator());
+			ASSERT_TRUE(!!pUnlockedAccounts);
+
+			for (auto& keyPair : keyPairs)
+				pUnlockedAccounts->modifier().add(std::move(keyPair));
+
+			// Sanity:
+			EXPECT_EQ(keyPairs.size(), pUnlockedAccounts->view().size());
+
+			// Act:
+			const auto& packetHandlers = context.testState().state().packetHandlers();
+
+			// - process unlocked acconuts request
+			auto pPacket = ionet::CreateSharedPacket<ionet::Packet>();
+			pPacket->Type = ionet::PacketType::Unlocked_Accounts;
+			ionet::ServerPacketHandlerContext handlerContext({}, "");
+			EXPECT_TRUE(packetHandlers.process(*pPacket, handlerContext));
+
+			assertPacket(handlerContext);
+		}
+	}
+
+	TEST(TEST_CLASS, PacketHandlerReturnsEmptyPacketWhenNoUnlockedAccountsArePresent) {
+		AssertPacketHandlerReturnsUnlockedAccounts(CreateKeyPairs(0), [](const auto& handlerContext) {
+			// Assert: only header is present
+			auto expectedPacketSize = sizeof(ionet::PacketHeader);
+			test::AssertPacketHeader(handlerContext, expectedPacketSize, ionet::PacketType::Unlocked_Accounts);
+		});
+	}
+
+	TEST(TEST_CLASS, PacketHandlerReturnsUnlockedAccounts) {
+		// Arrange:
+		auto keyPairs = CreateKeyPairs(3);
+		auto expectedPublicKeys = GetPublicKeys(keyPairs);
+		AssertPacketHandlerReturnsUnlockedAccounts(std::move(keyPairs), [&expectedPublicKeys](const auto& handlerContext) {
+			// Assert: header is correct and contains the expected number of keys
+			auto expectedPacketSize = sizeof(ionet::PacketHeader) + 3 * Key::Size;
+			test::AssertPacketHeader(handlerContext, expectedPacketSize, ionet::PacketType::Unlocked_Accounts);
+
+			const auto* pUnlockedPublicKeys = reinterpret_cast<const Key*>(test::GetSingleBufferData(handlerContext));
+			auto unlockedPublicKeys = std::set<Key>(pUnlockedPublicKeys, pUnlockedPublicKeys + 3);
+
+			EXPECT_EQ(expectedPublicKeys, unlockedPublicKeys);
 		});
 	}
 
@@ -201,6 +443,7 @@ namespace catapult { namespace harvesting {
 			config.HarvestingMosaicId = Harvesting_Mosaic_Id;
 			config.ImportanceGrouping = Importance_Grouping;
 			config.MinHarvesterBalance = Account_Balance;
+			config.MaxHarvesterBalance = Amount(std::numeric_limits<Amount::ValueType>::max());
 			auto cache = test::CreateEmptyCatapultCache(config, cacheConfig);
 			auto delta = cache.createDelta();
 
@@ -211,9 +454,9 @@ namespace catapult { namespace harvesting {
 			accountState.ImportanceSnapshots.set(Importance(123), importanceHeight);
 			accountState.Balances.credit(Harvesting_Mosaic_Id, balance);
 
-			// - add a block difficulty info
-			auto& blockDifficultyCache = delta.sub<cache::BlockDifficultyCache>();
-			blockDifficultyCache.insert(state::BlockDifficultyInfo(Height(1)));
+			// - add a block statistic
+			auto& blockStatisticCache = delta.sub<cache::BlockStatisticCache>();
+			blockStatisticCache.insert(state::BlockStatistic(Height(1)));
 
 			// - commit changes
 			delta.calculateStateHash(Height(1));
@@ -332,8 +575,9 @@ namespace catapult { namespace harvesting {
 				harvestedStateHash = context.capturedStateHashes()[0];
 
 				// - source public key is zero indicating harvester
-				ASSERT_EQ(1u, context.capturedSourcePublicKeys().size());
-				EXPECT_EQ(Key(), context.capturedSourcePublicKeys()[0]);
+				ASSERT_EQ(1u, context.capturedSourceIdentities().size());
+				EXPECT_EQ(Key(), context.capturedSourceIdentities()[0].PublicKey);
+				EXPECT_EQ("", context.capturedSourceIdentities()[0].Host);
 
 				// Sanity:
 				EXPECT_EQ(thread::TaskResult::Continue, result);

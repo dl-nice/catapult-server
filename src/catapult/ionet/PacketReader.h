@@ -26,6 +26,7 @@ namespace catapult { namespace ionet {
 
 	/// Stateful packet reader.
 	/// \note Behavior is undefined if error has been encountered on any previous call.
+	/// \note All reads are done in-place, so caller is responsible for ensuring aligned reads.
 	class PacketReader {
 	public:
 		/// Creates a reader around \a packet.
@@ -34,7 +35,7 @@ namespace catapult { namespace ionet {
 				, m_numRemainingBytes(packet.Size)
 				, m_hasError(false) {
 			require(sizeof(PacketHeader), "constructor");
-			m_numRemainingBytes -= sizeof(PacketHeader);
+			m_numRemainingBytes -= static_cast<uint32_t>(sizeof(PacketHeader));
 		}
 
 	public:

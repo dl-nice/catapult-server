@@ -19,13 +19,42 @@
 **/
 
 #include "HarvestingUtFacadeFactory.h"
+#include "HarvestingCacheUtils.h"
+#include "HarvestingObservers.h"
 #include "catapult/cache_core/AccountStateCache.h"
+#include "catapult/chain/ProcessContextsBuilder.h"
 #include "catapult/chain/ProcessingNotificationSubscriber.h"
 #include "catapult/model/BlockChainConfiguration.h"
 #include "catapult/model/BlockUtils.h"
 #include "catapult/model/FeeUtils.h"
+#include "catapult/observers/DemuxObserverBuilder.h"
 
 namespace catapult { namespace harvesting {
+
+	// region NotificationObserverProxy
+
+	namespace {
+		class NotificationObserverProxy : public observers::NotificationObserver {
+		public:
+			explicit NotificationObserverProxy(const std::shared_ptr<const observers::NotificationObserver>& pObserver)
+					: m_pObserver(pObserver)
+			{}
+
+		public:
+			const std::string& name() const override {
+				return m_pObserver->name();
+			}
+
+			void notify(const model::Notification& notification, observers::ObserverContext& context) const override {
+				return m_pObserver->notify(notification, context);
+			}
+
+		private:
+			std::shared_ptr<const observers::NotificationObserver> m_pObserver;
+		};
+	}
+
+	// endregion
 
 	// region HarvestingUtFacade::Impl
 
@@ -41,8 +70,14 @@ namespace catapult { namespace harvesting {
 				, m_executionConfig(executionConfig)
 				, m_cacheDetachableDelta(cache.createDetachableDelta())
 				, m_cacheDetachedDelta(m_cacheDetachableDelta.detach())
-				, m_pCacheDelta(m_cacheDetachedDelta.tryLock())
-		{}
+				, m_pCacheDelta(m_cacheDetachedDelta.tryLock()) {
+			// add additional observers to monitor accounts
+			observers::DemuxObserverBuilder observerBuilder;
+			observerBuilder.add(CreateHarvestingAccountAddressObserver(m_affectedAccounts.Addresses));
+			observerBuilder.add(CreateHarvestingAccountPublicKeyObserver(m_affectedAccounts.PublicKeys));
+			observerBuilder.add<model::Notification>(std::make_unique<NotificationObserverProxy>(m_executionConfig.pObserver));
+			m_executionConfig.pObserver = observerBuilder.build();
+		}
 
 	public:
 		Height height() const {
@@ -51,7 +86,16 @@ namespace catapult { namespace harvesting {
 
 	public:
 		bool apply(const model::TransactionInfo& transactionInfo) {
-			return apply(model::WeakEntityInfo(*transactionInfo.pEntity, transactionInfo.EntityHash));
+			auto originalSource = m_blockStatementBuilder.source();
+
+			if (apply(model::WeakEntityInfo(*transactionInfo.pEntity, transactionInfo.EntityHash)))
+				return true;
+
+			auto finalSource = m_blockStatementBuilder.source();
+			if (originalSource.PrimaryId != finalSource.PrimaryId)
+				m_blockStatementBuilder.popSource();
+
+			return false;
 		}
 
 		void unapply(const model::TransactionInfo& transactionInfo) {
@@ -65,11 +109,11 @@ namespace catapult { namespace harvesting {
 			auto importanceHeight = model::ConvertToImportanceHeight(pBlock->Height, m_blockChainConfig.ImportanceGrouping);
 
 			// 2. add back fee surpluses to accounts (skip cache lookup if no surplus)
-			auto& accountStateCache = m_pCacheDelta->sub<cache::AccountStateCache>();
+			auto& accountStateCacheDelta = m_pCacheDelta->sub<cache::AccountStateCache>();
 			for (const auto& transaction : pBlock->Transactions()) {
 				auto surplus = transaction.MaxFee - model::CalculateTransactionFee(blockHeader.FeeMultiplier, transaction);
 				if (Amount(0) != surplus) {
-					auto accountStateIter = accountStateCache.find(transaction.Signer);
+					auto accountStateIter = accountStateCacheDelta.find(transaction.SignerPublicKey);
 					state::ApplyFeeSurplus(accountStateIter.get(), { m_blockChainConfig.CurrencyMosaicId, surplus }, importanceHeight);
 				}
 			}
@@ -78,12 +122,15 @@ namespace catapult { namespace harvesting {
 			if (!apply(model::WeakEntityInfo(*pBlock, Hash256())))
 				return nullptr;
 
-			// 4. update block fields
-			pBlock->StateHash = m_blockChainConfig.ShouldEnableVerifiableState
+			// 4. update account states
+			updateAccountStates(accountStateCacheDelta);
+
+			// 5. update block fields
+			pBlock->StateHash = m_blockChainConfig.EnableVerifiableState
 					? m_pCacheDelta->calculateStateHash(height()).StateHash
 					: Hash256();
 
-			pBlock->BlockReceiptsHash = m_blockChainConfig.ShouldEnableVerifiableReceipts
+			pBlock->ReceiptsHash = m_blockChainConfig.EnableVerifiableReceipts
 					? model::CalculateMerkleHash(*m_blockStatementBuilder.build())
 					: Hash256();
 
@@ -98,21 +145,14 @@ namespace catapult { namespace harvesting {
 			observers::ObserverContext&>;
 
 		bool process(const Processor& processor) {
-			// 1. prepare state
-			auto catapultState = state::CatapultState();
-			catapultState.LastRecalculationHeight = model::ConvertToImportanceHeight(height(), m_blockChainConfig.ImportanceGrouping);
-			auto observerState = m_blockChainConfig.ShouldEnableVerifiableReceipts
-					? observers::ObserverState(*m_pCacheDelta, catapultState, m_blockStatementBuilder)
-					: observers::ObserverState(*m_pCacheDelta, catapultState);
+			// prepare state and contexts
+			chain::ProcessContextsBuilder contextBuilder(height(), m_blockTime, m_executionConfig);
+			contextBuilder.setCache(*m_pCacheDelta);
+			if (m_blockChainConfig.EnableVerifiableReceipts)
+				contextBuilder.setBlockStatementBuilder(m_blockStatementBuilder);
 
-			// 2. prepare contexts
-			auto network = m_executionConfig.Network;
-			auto readOnlyCache = m_pCacheDelta->toReadOnly();
-			auto notifyMode = observers::NotifyMode::Commit;
-
-			auto resolverContext = m_executionConfig.ResolverContextFactory(readOnlyCache);
-			auto validatorContext = validators::ValidatorContext(height(), m_blockTime, network, resolverContext, readOnlyCache);
-			auto observerContext = observers::ObserverContext(observerState, height(), notifyMode, resolverContext);
+			auto validatorContext = contextBuilder.buildValidatorContext();
+			auto observerContext = contextBuilder.buildObserverContext();
 
 			const auto& validator = *m_executionConfig.pValidator;
 			const auto& observer = *m_executionConfig.pObserver;
@@ -151,6 +191,11 @@ namespace catapult { namespace harvesting {
 			});
 		}
 
+		void updateAccountStates(cache::AccountStateCacheDelta& accountStateCacheDelta) {
+			PreserveAllAccounts(accountStateCacheDelta, m_affectedAccounts, height());
+			accountStateCacheDelta.commitRemovals();
+		}
+
 	private:
 		Timestamp m_blockTime;
 		model::BlockChainConfiguration m_blockChainConfig;
@@ -158,7 +203,9 @@ namespace catapult { namespace harvesting {
 		cache::CatapultCacheDetachableDelta m_cacheDetachableDelta;
 		cache::CatapultCacheDetachedDelta m_cacheDetachedDelta;
 		std::unique_ptr<cache::CatapultCacheDelta> m_pCacheDelta;
+
 		model::BlockStatementBuilder m_blockStatementBuilder;
+		HarvestingAffectedAccounts m_affectedAccounts;
 	};
 
 	// endregion

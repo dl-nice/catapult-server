@@ -32,7 +32,7 @@ namespace catapult { namespace harvesting {
 			// copy and update block header
 			model::BlockHeader blockHeader;
 			std::memcpy(static_cast<void*>(&blockHeader), &originalBlockHeader, sizeof(model::BlockHeader));
-			blockHeader.BlockTransactionsHash = transactionsInfo.TransactionsHash;
+			blockHeader.TransactionsHash = transactionsInfo.TransactionsHash;
 			blockHeader.FeeMultiplier = transactionsInfo.FeeMultiplier;
 
 			// generate the block
@@ -43,7 +43,7 @@ namespace catapult { namespace harvesting {
 	BlockGenerator CreateHarvesterBlockGenerator(
 			model::TransactionSelectionStrategy strategy,
 			const HarvestingUtFacadeFactory& utFacadeFactory,
-			const cache::MemoryUtCache& utCache) {
+			const cache::ReadWriteUtCache& utCache) {
 		auto transactionsInfoSupplier = CreateTransactionsInfoSupplier(strategy, utCache);
 		return [utFacadeFactory, transactionsInfoSupplier](const auto& blockHeader, auto maxTransactionsPerBlock) {
 			// 1. check height consistency

@@ -1,6 +1,7 @@
 from collections import defaultdict
 from enum import Enum
 import re
+import sys
 import traceback
 from xml.sax.saxutils import escape as xmlEscape
 
@@ -174,7 +175,7 @@ class NamespacesParser:
             'OPEN_PAREN': self._parseNormalOpenParen,
             'OPEN_BRACE': self._parseNormalBrace,
             'SEMI_COLON': self._parseNormalSemiColon,
-            'EQUALS': self._parseNormalEquals,
+            'EQUALS': self._parseNormalEquals
         }
 
         if tok.type in dispatch:
@@ -309,6 +310,7 @@ class NamespacesParser:
         self.tok = nextToken
         return NextTokenBehavior.Skip
 
+    # pylint: disable=too-many-branches
     def collectOperator(self):
         tok = lex.token()
         self.nameStack.append(tok)
@@ -332,6 +334,10 @@ class NamespacesParser:
             self.saveTokenOrBye(tok, tok2, 'EQUALS')
         # operator|
         elif tok.type == 'PIPE':
+            self.tok = tok2
+            return
+        # operator bool
+        elif tok.type == 'NAME' and tok.value == 'bool':
             self.tok = tok2
             return
         # operator*
@@ -409,7 +415,7 @@ class NamespacesParser:
                 Mode.InsideClassOrEnum: self.findClassEnd,
                 Mode.FindSemiColon: self.findSemiColon,
                 Mode.FindClosingParen: self.findCloseParen,
-                Mode.FindClosingBrace: self.findCloseBrace,
+                Mode.FindClosingBrace: self.findCloseBrace
             }
             dispatch[self.mode](self.tok)
 
@@ -441,7 +447,7 @@ class NamespacesParser:
                 tok = lex.token()
                 if not tok:
                     break
-        quit()
+        sys.exit(1)
 
     def switchToNormal(self):
         self.mode = Mode.Normal
@@ -502,6 +508,13 @@ class NamespacesParser:
 
         elif tok.type == 'SEMI_COLON':
             self.switchToNormal()
+
+            # do not consider forward declarations in global scope
+            # (they do not add anything to namespace)
+            if not self.namespaceStack:
+                # no need to clearNameStack() cause it is empty
+                return
+
             self.namespaceStack[-1].hadForward = True
 
             name = '::'.join(map(lambda c: c.current, self.namespaceStack))

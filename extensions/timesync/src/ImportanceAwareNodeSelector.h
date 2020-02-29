@@ -30,7 +30,7 @@ namespace catapult {
 
 namespace catapult { namespace timesync {
 
-	/// A node selector that selects nodes according to the importance of the account used to boot the node.
+	/// Node selector that selects nodes according to the importance of the account used to boot the node.
 	class ImportanceAwareNodeSelector {
 	public:
 		using NodeSelector = std::function<ionet::NodeSet (extensions::WeightedCandidates&, uint64_t, size_t)>;
@@ -56,7 +56,7 @@ namespace catapult { namespace timesync {
 				Height height) const;
 
 	private:
-		std::pair<bool, Importance> isCandidate(
+		std::pair<Importance, bool> isCandidate(
 				const cache::ImportanceView& importanceView,
 				const ionet::Node& node,
 				const ionet::NodeInfo& nodeInfo,

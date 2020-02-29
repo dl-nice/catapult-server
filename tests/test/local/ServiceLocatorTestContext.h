@@ -28,9 +28,9 @@
 #include "catapult/ionet/NodeContainer.h"
 #include "catapult/thread/MultiServicePool.h"
 #include "catapult/utils/NetworkTime.h"
-#include "tests/test/core/AddressTestUtils.h"
 #include "tests/test/core/SchedulerTestUtils.h"
 #include "tests/test/core/mocks/MockMemoryBlockStorage.h"
+#include "tests/test/nodeps/KeyTestUtils.h"
 #include "tests/test/other/mocks/MockNodeSubscriber.h"
 #include "tests/test/other/mocks/MockStateChangeSubscriber.h"
 #include "tests/test/other/mocks/MockTransactionStatusSubscriber.h"
@@ -45,12 +45,17 @@ namespace catapult { namespace test {
 		{}
 
 		/// Creates the test state around \a cache.
-		explicit ServiceTestState(cache::CatapultCache&& cache) : ServiceTestState(std::move(cache), &utils::NetworkTime)
+		explicit ServiceTestState(cache::CatapultCache&& cache) : ServiceTestState(std::move(cache), CreateDefaultNetworkTimeSupplier())
 		{}
 
 		/// Creates the test state around \a cache and \a timeSupplier.
 		ServiceTestState(cache::CatapultCache&& cache, const supplier<Timestamp>& timeSupplier)
 				: m_config(CreatePrototypicalCatapultConfiguration())
+				, m_nodes(
+						std::numeric_limits<size_t>::max(),
+						model::NodeIdentityEqualityStrategy::Key_And_Host,
+						GetBanSettings(m_config),
+						timeSupplier)
 				, m_catapultCache(std::move(cache))
 				, m_storage(std::make_unique<mocks::MockMemoryBlockStorage>(), std::make_unique<mocks::MockMemoryBlockStorage>())
 				, m_pUtCache(CreateUtCacheProxy())
@@ -60,7 +65,6 @@ namespace catapult { namespace test {
 						m_config,
 						m_nodes,
 						m_catapultCache,
-						m_catapultState,
 						m_storage,
 						m_score,
 						*m_pUtCache,
@@ -111,10 +115,20 @@ namespace catapult { namespace test {
 		}
 
 	private:
+		static ionet::BanSettings GetBanSettings(const config::CatapultConfiguration& config) {
+			const auto& banConfig = config.Node.Banning;
+			ionet::BanSettings banSettings;
+			banSettings.DefaultBanDuration = banConfig.DefaultBanDuration;
+			banSettings.MaxBanDuration = banConfig.MaxBanDuration;
+			banSettings.KeepAliveDuration = banConfig.KeepAliveDuration;
+			banSettings.MaxBannedNodes = banConfig.MaxBannedNodes;
+			return banSettings;
+		}
+
+	private:
 		config::CatapultConfiguration m_config;
 		ionet::NodeContainer m_nodes;
 		cache::CatapultCache m_catapultCache;
-		state::CatapultState m_catapultState;
 		io::BlockStorageCache m_storage;
 		extensions::LocalNodeChainScore m_score;
 		std::unique_ptr<cache::MemoryUtCacheProxy> m_pUtCache;
@@ -130,7 +144,7 @@ namespace catapult { namespace test {
 		extensions::ServiceState m_state;
 	};
 
-	/// A test context for extension service tests.
+	/// Test context for extension service tests.
 	template<typename TTraits>
 	class ServiceLocatorTestContext {
 	public:
@@ -142,7 +156,7 @@ namespace catapult { namespace test {
 
 		/// Creates the test context around \a cache.
 		explicit ServiceLocatorTestContext(cache::CatapultCache&& cache)
-				: ServiceLocatorTestContext(std::move(cache), &utils::NetworkTime)
+				: ServiceLocatorTestContext(std::move(cache), CreateDefaultNetworkTimeSupplier())
 		{}
 
 		/// Creates the test context around \a cache and \a timeSupplier.

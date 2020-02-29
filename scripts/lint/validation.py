@@ -348,7 +348,7 @@ class TypoChecker(SimpleValidator):
             re.compile(r'(\d|0x[0-9a-fA-F]+)u\)'): 'no need for explicit unsigned qualifier',
             re.compile(r';;$'): 'no double semicolons',
             re.compile(r'[a-zA-Z>\*]>[^&\n]*= {'): 'prefer container initialization to container assign',
-            re.compile(r'(/\*+|///) The '): 'documentation should not start with \'The\'',
+            re.compile(r'(/\*+|///?) (The|An?) [^=]'): 'documentation should not start with \'The\' or `A(n)`',
             re.compile(r'::(En|Dis)able[^d]'): 'enum values should be named Enable*d/Disable*d',
             re.compile(r', and'): 'rephrase to avoid \', and\'',
             re.compile(r'// #include'): 'don\'t comment out includes!',
@@ -366,7 +366,7 @@ class TypoChecker(SimpleValidator):
             re.compile(r'constexpr auto \w+\(\) {'): 'cpp17 shouldn\'t need suspect function',
             re.compile(r'^\s*(inline|constexpr)\s*$'): 'combine with following line',
             re.compile(r'(inline|constexpr) static'): 'static first',
-            re.compile(r'acquireReader\(\)\);'): 'for safety, acquire read lock outside of view constructor',
+            re.compile(r'acquire(Reader|Writer)\(\)(\);|,)'): 'for safety, acquire read lock outside of view constructor',
             re.compile(r'(reader|writer)Lock'): 'prefer readLock/writeLock',
             re.compile(r'createDetachableDelta\(\).detach\(\)'): 'warning: releasing read lock at end of scope, might lead to crash',
             re.compile(r'sizeof\((model::)?Block\)'): 'use sizeof(BlockHeader)',
@@ -379,7 +379,26 @@ class TypoChecker(SimpleValidator):
             re.compile(r'^\s+} }|{ {$'): 'remove space between braces',
             re.compile(r'_tag::'): 'use ByteArray instead of _tag',
             re.compile(r'Observes.*including'): 'use and instead of including',
-            re.compile(r'/// (Arrange|Act|Assert):'): 'use //'
+            re.compile(r'/// (Arrange|Act|Assert):'): 'use //',
+            re.compile(r'pair<bool'): 'use pair with bool as second',
+            re.compile(r'\ba \\a'): 'just use \\a',
+            re.compile(r'\binto \\a builder'): 'into => to',
+            re.compile(r'cosigner'): 'cosigner(s) => cosignatory(ies)',
+            re.compile(r'^\t*WAIT_FOR_VALUE(_EXPR)?\([01]u,'): 'use _ZERO or _ONE',
+            re.compile(r'(EXPECT|ASSERT)_.*(ToHexString|Hex\b)'): 'compare buffers directly',
+            re.compile(r'(EXPECT|ASSERT)_.*[^"],[^<]*(ToString)'): 'compare buffers directly (rule 2)',
+            re.compile(r'while\('): 'missing space after while',
+            re.compile(r'while ?\(0\)'): 'use while (false)',
+            re.compile(r'\) do {'): 'start `do` on own line',
+            re.compile(r'/// (Return|Set|Get)\b'): 'prefer plural',
+            re.compile(r'/// Returns [^\\]'): 'prefer /// Gets for non boolean values',
+            re.compile(r'/// Gets \\c (true|false)'): 'prefer /// Returns for boolean values',
+            re.compile(r'\\[^c] (true|false)'): 'use \\c for booleans',
+            re.compile(r'/// Gets the (const )?(pointer|reference)\b'): 'use a instead of the',
+            re.compile(r'\d+u( [^:] \d+)*u'): 'only first `u` is needed',
+            re.compile(r' \.([^\.]|$)'): 'check spacing around \'.\'',
+            re.compile(r'Header::(Footer|Header)'): 'drop Header',
+            re.compile(r'\S \(\)[^>]'): 'remove space before ()'
         }
 
     def check(self, lineNumber, line):
@@ -400,7 +419,7 @@ class BasicFunctionAliasValidator(SimpleValidator):
             re.compile(r'std::function<.*\(\)>'): 'use supplier alias',
             re.compile(r'std::function<void'): 'use action or consumer alias',
             re.compile(r'consumer<>'): 'use action alias',
-            re.compile(r'std::function<bool'): 'use predicate alias',
+            re.compile(r'std::function<bool'): 'use predicate alias'
         }
 
     def check(self, lineNumber, line):
@@ -454,7 +473,7 @@ class SpaceBraceValidator(SimpleValidator):
             re.compile(r'enum : (uint|size_t)'),
 
             # special for src/catapult/utils/Logging.h
-            re.compile(r'custom_info_tagger<SubcomponentTraits>>>'),
+            re.compile(r'custom_info_tagger<SubcomponentTraits>>>')
         ]
 
     def check(self, lineNumber, line):
@@ -502,7 +521,7 @@ class ReturnOnNewLineValidator(SimpleValidator):
             re.compile(r'static constexpr .* return'),
 
             # skip comments
-            re.compile(r'^\s*//'),
+            re.compile(r'^\s*//')
         ]
 
     def check(self, lineNumber, line):
@@ -570,9 +589,15 @@ class MultiConditionChecker(SimpleValidator):
         self.patternTestNameIf = re.compile(r'TEST.*If|\b(Next|Remove)When')
         self.patternTestNameIfExclusions = re.compile(r'\b(Next|Remove)If')
 
+        self.patternHeaderComment = re.compile(r'^[^/]*// .*\.$')
         self.patternDoxygenComment = re.compile(r'///')
 
         self.patternAutoContextParam = re.compile(r'auto& (context|notification)')
+
+        self.patternGetsSetsDoc = re.compile(r'/// (Gets|Sets) ')
+        self.patternGetsSetsDocWithArticle = re.compile(r'/// (Gets|Sets) (a|an|the|all|information)\b')
+
+        self.patternTrailingOperator = re.compile(r' (\+|-|\*|/|%|&|\||^|<<|>>)\s*$')
 
         self.errors = {
             self.checkTestLine: 'TEST should use TEST_CLASS',
@@ -588,8 +613,11 @@ class MultiConditionChecker(SimpleValidator):
             self.checkDeclareMacroNoParams: 'use DEFINE macro',
             self.checkSingleLineFunction: 'reformat info multiple lines',
             self.checkTestNameIf: 'use When instead of If',
+            self.checkHeaderComment: '. unexpected in header file comment',
             self.checkCppDoxygenComment: '/// unexpected in cpp file',
-            self.checkAutoContextParam: 'use type name instead of auto'
+            self.checkAutoContextParam: 'use type name instead of auto',
+            self.checkGetsSetsDocumentation: 'add an article to documentation',
+            self.checkTrailingOperator: 'operators should start lines, not finish them'
         }
 
     def reset(self, path, errorReporter):
@@ -705,6 +733,10 @@ class MultiConditionChecker(SimpleValidator):
     def checkTestNameIf(self, line, _):
         return self.patternTestNameIf.search(line) and not self.patternTestNameIfExclusions.search(line)
 
+    def checkHeaderComment(self, _, rawLine):
+        # rule only applies to header files
+        return self.path.endswith('.h') and self.patternHeaderComment.match(rawLine)
+
     def checkCppDoxygenComment(self, _, rawLine):
         # rule only applies to cpp files
         return self.path.endswith('.cpp') and self.patternDoxygenComment.search(rawLine)
@@ -712,6 +744,13 @@ class MultiConditionChecker(SimpleValidator):
     def checkAutoContextParam(self, line, _):
         # rule only applies to observer and validator implementations
         return self.path.endswith(('Observer.cpp', 'Validator.cpp')) and self.patternAutoContextParam.search(line)
+
+    def checkGetsSetsDocumentation(self, _, rawLine):
+        return self.patternGetsSetsDoc.search(rawLine) and not self.patternGetsSetsDocWithArticle.search(rawLine)
+
+    def checkTrailingOperator(self, line, _):
+        # not part of SimpleValidator because comments and strings should be removed before applying rule
+        return self.patternTrailingOperator.search(line)
 
     def check(self, lineNumber, line):
         strippedLine = stripCommentsAndStrings(line)
@@ -927,6 +966,26 @@ class EnumValueBlankLineValidator(SimpleValidator):
 
         if self.patternEnumValue.match(self.previousLine) and not self.patternBlankLine.match(strippedLine):
             self.errorReporter(self.NAME, Line(self.path, self.previousLine, lineNumber - 1, 'enum value is missing following blank line'))
+
+        self.previousLine = strippedLine
+
+
+class TrailingCommaValidator(SimpleValidator):
+    """Validator for ensuring that there are no trailing commas."""
+
+    SUITE_NAME = 'TrailingCommaChecker'
+    NAME = 'trailingCommaChecker'
+
+    def __init__(self):
+        super().__init__()
+        self.previousLine = ''
+
+    def check(self, lineNumber, line):
+        strippedLine = line.strip('\n\r\t')  # strip tabs too
+
+        if self.previousLine and ',' == self.previousLine[-1]:
+            if strippedLine and strippedLine[0] in [')', ']', '}']:
+                self.errorReporter(self.NAME, Line(self.path, self.previousLine, lineNumber - 1, 'delete trailing comma'))
 
         self.previousLine = strippedLine
 
@@ -1148,9 +1207,13 @@ class InsertionOperatorFormattingValidator(SimpleValidator):
         self.previousStrippedLine = ''
 
     def check(self, lineNumber, line):
-        strippedLine = line.strip('\n\r\t')  # also strip tabs
+        strippedLine = line.strip('\n\r\t;')  # also strip tabs and semicolons
 
         if strippedLine.startswith('<<'):
+            if (any(strippedLine.endswith(postfix) for postfix in ['open_array', 'open_document'])
+                    and self.previousStrippedLine.endswith('"')):
+                self.reportError(lineNumber, strippedLine, '<< should be on previous line')
+
             if self.previousStrippedLine.startswith('<<'):
                 return
 
@@ -1273,6 +1336,7 @@ def createValidators():
         RegionValidator,
         MacroSemicolonValidator,
         EnumValueBlankLineValidator,
+        TrailingCommaValidator,
         ClosingBraceVerticalSpacingValidator,
         NamespaceOpeningBraceVerticalSpacingValidator,
         CopyrightCommentValidator,

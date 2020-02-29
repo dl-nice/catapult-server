@@ -102,19 +102,20 @@ namespace catapult { namespace builders {
 				const typename TAliasTraits::TransactionProperties& expectedProperties,
 				const consumer<typename TAliasTraits::Builder&>& buildTransaction) {
 			// Arrange:
-			auto networkId = static_cast<model::NetworkIdentifier>(0x62);
+			auto networkIdentifier = static_cast<model::NetworkIdentifier>(0x62);
 			auto signer = test::GenerateRandomByteArray<Key>();
 
 			// Act:
-			auto builder = typename TAliasTraits::Builder(networkId, signer);
+			auto builder = typename TAliasTraits::Builder(networkIdentifier, signer);
 			buildTransaction(builder);
 			auto pTransaction = TTraits::InvokeBuilder(builder);
 
 			// Assert:
 			TTraits::CheckBuilderSize(0, builder);
 			TTraits::CheckFields(0, *pTransaction);
-			EXPECT_EQ(signer, pTransaction->Signer);
-			EXPECT_EQ(0x6201, pTransaction->Version);
+			EXPECT_EQ(signer, pTransaction->SignerPublicKey);
+			EXPECT_EQ(1u, pTransaction->Version);
+			EXPECT_EQ(static_cast<model::NetworkIdentifier>(0x62), pTransaction->Network);
 			EXPECT_EQ(TAliasTraits::Transaction_Type, pTransaction->Type);
 
 			TAliasTraits::AssertTransactionProperties(expectedProperties, *pTransaction);
@@ -142,7 +143,7 @@ namespace catapult { namespace builders {
 	TRAITS_BASED_TEST(CanCreateTransaction) {
 		// Arrange:
 		auto namespaceId = test::GenerateRandomValue<NamespaceId>();
-		auto expectedProperties = typename TAliasTraits::TransactionProperties(namespaceId, model::AliasAction::Link);
+		auto expectedProperties = typename TAliasTraits::TransactionProperties(namespaceId, model::AliasAction::Unlink);
 
 		// Assert:
 		AssertCanBuildTransaction<TAliasTraits, TTraits>(expectedProperties, [namespaceId](auto& builder) {
@@ -157,7 +158,7 @@ namespace catapult { namespace builders {
 	TRAITS_BASED_TEST(CanSetAlias) {
 		// Arrange:
 		auto namespaceId = test::GenerateRandomValue<NamespaceId>();
-		auto expectedProperties = typename TAliasTraits::TransactionProperties(namespaceId, model::AliasAction::Link);
+		auto expectedProperties = typename TAliasTraits::TransactionProperties(namespaceId, model::AliasAction::Unlink);
 		test::FillWithRandomData(expectedProperties.Aliased);
 		const auto& aliased = expectedProperties.Aliased;
 

@@ -19,6 +19,7 @@
 **/
 
 #pragma once
+#include "DelegatePrioritizationPolicy.h"
 #include "catapult/cache_core/AccountStateCache.h"
 #include "catapult/crypto/KeyPair.h"
 #include "catapult/utils/Hashers.h"
@@ -26,9 +27,14 @@
 
 namespace catapult { namespace harvesting {
 
+	// region UnlockedAccountsAddResult
+
 #define UNLOCKED_ACCOUNTS_ADD_RESULT_LIST \
-	/* Account was successfully unlocked (it might have already been unlocked). */ \
-	ENUM_VALUE(Success) \
+	/* Account was successfully (newly) unlocked. */ \
+	ENUM_VALUE(Success_New) \
+	\
+	/* Account was successfully (previously) unlocked. */ \
+	ENUM_VALUE(Success_Redundant) \
 	\
 	/* Account could not be unlocked because it is ineligible for harvesting. */ \
 	ENUM_VALUE(Failure_Harvesting_Ineligible) \
@@ -49,77 +55,70 @@ namespace catapult { namespace harvesting {
 	/// Insertion operator for outputting \a value to \a out.
 	std::ostream& operator<<(std::ostream& out, UnlockedAccountsAddResult value);
 
-	/// A read only view on top of unlocked accounts.
+	// endregion
+
+	/// Container used by unlocked accounts to store key pairs.
+	using UnlockedAccountsKeyPairContainer = std::vector<std::pair<crypto::KeyPair, size_t>>;
+
+	/// Read only view on top of unlocked accounts.
 	class UnlockedAccountsView : utils::MoveOnly {
 	public:
-		/// Creates a view around \a keyPairs with lock context \a readLock.
-		UnlockedAccountsView(const std::vector<crypto::KeyPair>& keyPairs, utils::SpinReaderWriterLock::ReaderLockGuard&& readLock)
-				: m_keyPairs(keyPairs)
-				, m_readLock(std::move(readLock))
-		{}
+		/// Creates a view around \a prioritizedKeyPairs with lock context \a readLock.
+		UnlockedAccountsView(
+				const UnlockedAccountsKeyPairContainer& prioritizedKeyPairs,
+				utils::SpinReaderWriterLock::ReaderLockGuard&& readLock);
 
 	public:
-		/// Returns the number of unlocked accounts.
+		/// Gets the number of unlocked accounts.
 		size_t size() const;
 
 		/// Returns \c true if the public key belongs to an unlocked account, \c false otherwise.
 		bool contains(const Key& publicKey) const;
 
-		/// Returns a const iterator to the first element of the underlying container.
-		auto begin() const {
-			return m_keyPairs.cbegin();
-		}
-
-		/// Returns a const iterator to the element following the last element of the underlying container.
-		auto end() const {
-			return m_keyPairs.cend();
-		}
+		/// Calls \a consumer with key pairs until all are consumed or \c false is returned by consumer.
+		void forEach(const predicate<const crypto::KeyPair&>& consumer) const;
 
 	private:
-		const std::vector<crypto::KeyPair>& m_keyPairs;
+		const UnlockedAccountsKeyPairContainer& m_prioritizedKeyPairs;
 		utils::SpinReaderWriterLock::ReaderLockGuard m_readLock;
 	};
 
-	/// A write only view on top of unlocked accounts.
+	/// Write only view on top of unlocked accounts.
 	class UnlockedAccountsModifier : utils::MoveOnly {
 	private:
 		using KeyPredicate = predicate<const Key&>;
 
 	public:
-		/// Creates a view around \a maxUnlockedAccounts and \a keyPairs with lock context \a readLock.
+		/// Creates a view around \a maxUnlockedAccounts, \a prioritizer and \a prioritizedKeyPairs with lock context \a writeLock.
 		UnlockedAccountsModifier(
 				size_t maxUnlockedAccounts,
-				std::vector<crypto::KeyPair>& keyPairs,
-				utils::SpinReaderWriterLock::ReaderLockGuard&& readLock)
-				: m_maxUnlockedAccounts(maxUnlockedAccounts)
-				, m_keyPairs(keyPairs)
-				, m_readLock(std::move(readLock))
-				, m_writeLock(m_readLock.promoteToWriter())
-		{}
+				const DelegatePrioritizer& prioritizer,
+				UnlockedAccountsKeyPairContainer& prioritizedKeyPairs,
+				utils::SpinReaderWriterLock::WriterLockGuard&& writeLock);
 
 	public:
 		/// Adds (unlocks) the account identified by key pair (\a keyPair).
 		UnlockedAccountsAddResult add(crypto::KeyPair&& keyPair);
 
 		/// Removes (locks) the account identified by the public key (\a publicKey).
-		void remove(const Key& publicKey);
+		bool remove(const Key& publicKey);
 
 		/// Removes all accounts for which \a predicate returns \c true.
 		void removeIf(const KeyPredicate& predicate);
 
 	private:
 		size_t m_maxUnlockedAccounts;
-		std::vector<crypto::KeyPair>& m_keyPairs;
-		utils::SpinReaderWriterLock::ReaderLockGuard m_readLock;
+		DelegatePrioritizer m_prioritizer;
+		UnlockedAccountsKeyPairContainer& m_prioritizedKeyPairs;
 		utils::SpinReaderWriterLock::WriterLockGuard m_writeLock;
 	};
 
 	/// Container of all unlocked (harvesting candidate) accounts.
 	class UnlockedAccounts {
 	public:
-		/// Creates an unlocked accounts container that allows at most \a maxUnlockedAccounts unloced accounts.
-		explicit UnlockedAccounts(size_t maxUnlockedAccounts) : m_maxUnlockedAccounts(maxUnlockedAccounts)
-		{}
+		/// Creates an unlocked accounts container that allows at most \a maxUnlockedAccounts unlocked accounts
+		/// and uses \a prioritizer to look up prioritization scores.
+		UnlockedAccounts(size_t maxUnlockedAccounts, const DelegatePrioritizer& prioritizer);
 
 	public:
 		/// Gets a read only view of the unlocked accounts.
@@ -130,7 +129,8 @@ namespace catapult { namespace harvesting {
 
 	private:
 		size_t m_maxUnlockedAccounts;
-		std::vector<crypto::KeyPair> m_keyPairs;
+		DelegatePrioritizer m_prioritizer;
+		UnlockedAccountsKeyPairContainer m_prioritizedKeyPairs;
 		mutable utils::SpinReaderWriterLock m_lock;
 	};
 }}

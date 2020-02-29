@@ -100,10 +100,10 @@ namespace catapult { namespace cache {
 			, m_pruningFilter(m_settings.PruningMode)
 			, m_pWriteBatch(std::make_unique<rocksdb::WriteBatch>()) {
 		if (settings.ColumnFamilyNames.empty())
-			CATAPULT_THROW_INVALID_ARGUMENT("missing column family names")
+			CATAPULT_THROW_INVALID_ARGUMENT("missing column family names");
 
 		if (0 != settings.MaxDatabaseWriteBatchSize.bytes() && settings.MaxDatabaseWriteBatchSize < utils::FileSize::FromKilobytes(100))
-			CATAPULT_THROW_INVALID_ARGUMENT("too small setting of DatabaseWriteBatchSize")
+			CATAPULT_THROW_INVALID_ARGUMENT("too small setting of DatabaseWriteBatchSize");
 
 		boost::system::error_code ec;
 		boost::filesystem::create_directories(m_settings.DatabaseDirectory, ec);
@@ -161,7 +161,7 @@ namespace catapult { namespace cache {
 		if (status.ok())
 			return;
 
-		// note: this is intentional, in case of not found status will be set via .setFound() above
+		// note: this is intentional, in case of not found status will be set via `setFound` above
 		if (!status.IsNotFound())
 			CATAPULT_THROW_DB_KEY_ERROR("could not retrieve value");
 	}

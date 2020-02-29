@@ -49,7 +49,7 @@ namespace catapult { namespace mongo {
 		auto CreateTransactionStatuses(size_t count) {
 			std::vector<model::TransactionStatus> statuses;
 			for (auto i = 0u; i < count; ++i)
-				statuses.emplace_back(test::GenerateRandomByteArray<Hash256>(), i, Timestamp(i * i));
+				statuses.emplace_back(test::GenerateRandomByteArray<Hash256>(), Timestamp(i * i), i);
 
 			return statuses;
 		}
@@ -100,15 +100,17 @@ namespace catapult { namespace mongo {
 
 			auto txCursor = collection.find({});
 			for (const auto& view : txCursor) {
+				auto statusView = view["status"].get_document().view();
+
 				Hash256 dbHash;
-				mappers::DbBinaryToModelArray(dbHash, view["hash"].get_binary());
+				mappers::DbBinaryToModelArray(dbHash, statusView["hash"].get_binary());
 				auto expectedIter = expectedTransactionStatuses.find(dbHash);
 				ASSERT_TRUE(expectedTransactionStatuses.cend() != expectedIter);
 
 				const auto& status = expectedIter->second;
 				EXPECT_EQ(status.Hash, dbHash);
-				EXPECT_EQ(status.Status, test::GetUint32(view, "status"));
-				EXPECT_EQ(status.Deadline, Timestamp(test::GetUint64(view, "deadline")));
+				EXPECT_EQ(status.Status, test::GetUint32(statusView, "code"));
+				EXPECT_EQ(status.Deadline, Timestamp(test::GetUint64(statusView, "deadline")));
 			}
 		}
 	}

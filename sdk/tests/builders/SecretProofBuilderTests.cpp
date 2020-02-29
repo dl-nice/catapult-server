@@ -48,7 +48,7 @@ namespace catapult { namespace builders {
 		void AssertTransactionProperties(const TransactionProperties& expectedProperties, const TTransaction& transaction) {
 			EXPECT_EQ(expectedProperties.HashAlgorithm, transaction.HashAlgorithm);
 			EXPECT_EQ(expectedProperties.Secret, transaction.Secret);
-			EXPECT_EQ(expectedProperties.Recipient, transaction.Recipient);
+			EXPECT_EQ(expectedProperties.Recipient, transaction.RecipientAddress);
 			EXPECT_EQ_MEMORY(expectedProperties.Proof.pData, transaction.ProofPtr(), expectedProperties.Proof.Size);
 		}
 
@@ -58,19 +58,20 @@ namespace catapult { namespace builders {
 				const TransactionProperties& expectedProperties,
 				const consumer<SecretProofBuilder&>& buildTransaction) {
 			// Arrange:
-			auto networkId = static_cast<model::NetworkIdentifier>(0x62);
+			auto networkIdentifier = static_cast<model::NetworkIdentifier>(0x62);
 			auto signer = test::GenerateRandomByteArray<Key>();
 
 			// Act:
-			SecretProofBuilder builder(networkId, signer);
+			SecretProofBuilder builder(networkIdentifier, signer);
 			buildTransaction(builder);
 			auto pTransaction = TTraits::InvokeBuilder(builder);
 
 			// Assert:
 			TTraits::CheckBuilderSize(additionalSize, builder);
 			TTraits::CheckFields(additionalSize, *pTransaction);
-			EXPECT_EQ(signer, pTransaction->Signer);
-			EXPECT_EQ(0x6201, pTransaction->Version);
+			EXPECT_EQ(signer, pTransaction->SignerPublicKey);
+			EXPECT_EQ(1u, pTransaction->Version);
+			EXPECT_EQ(static_cast<model::NetworkIdentifier>(0x62), pTransaction->Network);
 			EXPECT_EQ(model::Entity_Type_Secret_Proof, pTransaction->Type);
 
 			AssertTransactionProperties(expectedProperties, *pTransaction);
@@ -122,7 +123,7 @@ namespace catapult { namespace builders {
 
 		// Assert:
 		AssertCanBuildTransaction<TTraits>(0, expectedProperties, [&recipient = expectedProperties.Recipient](auto& builder) {
-			builder.setRecipient(recipient);
+			builder.setRecipientAddress(recipient);
 		});
 	}
 

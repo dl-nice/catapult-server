@@ -125,6 +125,24 @@ namespace catapult { namespace utils {
 
 	// endregion
 
+	// region GetPaddingSize
+
+	TEST(TEST_CLASS, GetPaddingSizeCalculatesPaddingSizeCorrectly) {
+		EXPECT_EQ(0u, GetPaddingSize(40u, 8));
+		EXPECT_EQ(7u, GetPaddingSize(49u, 8));
+		EXPECT_EQ(4u, GetPaddingSize(52u, 8));
+
+		EXPECT_EQ(2u, GetPaddingSize(40u, 7));
+		EXPECT_EQ(0u, GetPaddingSize(49u, 7));
+		EXPECT_EQ(4u, GetPaddingSize(52u, 7));
+
+		EXPECT_EQ(0u, GetPaddingSize(40u, 1));
+		EXPECT_EQ(0u, GetPaddingSize(49u, 1));
+		EXPECT_EQ(0u, GetPaddingSize(52u, 1));
+	}
+
+	// endregion
+
 	// region GetNumBits
 
 	TEST(TEST_CLASS, GetNumBitsReturnsCorrectNumberOfBits) {
@@ -194,7 +212,7 @@ namespace catapult { namespace utils {
 				// Act:
 				auto result = Log2TimesPowerOfTwo(value, Exponent);
 				auto expected = std::log2(value) * Two_To_Fifty_Four;
-				auto ratio = 0.0 == expected && 0 == result ? 1 : result / expected;
+				auto ratio = 0.0 == expected && 0 == result ? 1.0 : static_cast<double>(result) / expected;
 
 				// Assert:
 				auto message = "for value " + std::to_string(value);
@@ -212,6 +230,32 @@ namespace catapult { namespace utils {
 
 		// Assert:
 		EXPECT_EQ(0x07FD0E2FCCDB25E2u, result);
+	}
+
+	// endregion
+
+	// region FixedPointPowerOfTwo
+
+	namespace {
+		auto FixedPointToDouble(int32_t value) {
+			return static_cast<double>(value) / 65'536;
+		}
+	}
+
+	TEST(TEST_CLASS, FixedPointPowerOfTwoIsAGoodApproximationForExactValue) {
+		// Arrange:
+		for (auto value = -(6 << 16); value < 15 << 16; value += 0xFF) {
+			// Act:
+			auto result = FixedPointToDouble(static_cast<int32_t>(FixedPointPowerOfTwo(value)));
+			auto exactResult = std::pow(2, FixedPointToDouble(value));
+			auto relativeError = (exactResult - result) / exactResult;
+
+			// Assert:
+			EXPECT_LT(relativeError, 0.001)
+					<< "for value (" << FixedPointToDouble(value)
+					<< "), result (" << result
+					<< "), exact result (" << exactResult << ")";
+		}
 	}
 
 	// endregion

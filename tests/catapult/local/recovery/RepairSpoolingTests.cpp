@@ -57,6 +57,8 @@ namespace catapult { namespace local {
 					io::IndexFile(directory.file("index.dat")).set(indexValue);
 					io::IndexFile(directory.file("marker")).set(0);
 				}
+
+				io::IndexFile(rootMarkerFilename()).set(0);
 			}
 
 		public:
@@ -65,8 +67,20 @@ namespace catapult { namespace local {
 			}
 
 		public:
+			std::string rootMarkerFilename() const {
+				return m_dataDirectory.rootDir().file("marker");
+			}
+
 			bool exists(const std::string& queueName) const {
 				return boost::filesystem::exists(m_dataDirectory.spoolDir(queueName).path());
+			}
+
+			size_t countRootFiles() const {
+				auto begin = boost::filesystem::directory_iterator(m_dataDirectory.rootDir().path());
+				auto end = boost::filesystem::directory_iterator();
+				return static_cast<size_t>(std::count_if(begin, end, [](const auto& entry) {
+					return boost::filesystem::is_regular_file(entry.path());
+				}));
 			}
 
 			size_t countFiles(const std::string& queueName) const {
@@ -173,6 +187,7 @@ namespace catapult { namespace local {
 		void RepairAndCheckNonStateChangeDirectories(TestContext& context, uint64_t expectedIndexValue, size_t numRepairs = 1) {
 			// Sanity:
 			EXPECT_EQ(6u, TTraits::GetPurgedQueueNames().size() + TTraits::GetRetainedQueueNames().size());
+			EXPECT_EQ(1u, context.countRootFiles());
 
 			// Act:
 			for (auto i = 0u; i < numRepairs; ++i)
@@ -181,6 +196,10 @@ namespace catapult { namespace local {
 			// Assert: check purged directories
 			for (const auto& purgedQueueName : TTraits::GetPurgedQueueNames())
 				AssertPurged(context, purgedQueueName);
+
+			// - only marker left in root dir
+			EXPECT_EQ(1u, context.countRootFiles());
+			EXPECT_TRUE(boost::filesystem::exists(context.rootMarkerFilename()));
 
 			// - check retained directories
 			for (const auto& retainedQueueName : TTraits::GetRetainedQueueNames())

@@ -53,7 +53,9 @@ namespace catapult { namespace chain {
 #endif
 
 		uint32_t ExtractFromHashAtPosition(const GenerationHash& hash, size_t index) {
-			return BSWAP(*reinterpret_cast<const uint32_t*>(hash.data() + index));
+			uint32_t value;
+			std::memcpy(&value, hash.data() + index, sizeof(uint32_t));
+			return BSWAP(value);
 		}
 
 		GenerationHashInfo ExtractGenerationHashInfo(const GenerationHash& generationHash) {
@@ -107,14 +109,32 @@ namespace catapult { namespace chain {
 
 	namespace {
 		BlockTarget GetMultiplier(uint64_t timeDiff, const model::BlockChainConfiguration& config) {
-			auto targetTime = config.BlockGenerationTargetTime.seconds();
-			double smoother = 1.0;
+			using boost::multiprecision::int128_t;
+			using boost::multiprecision::uint128_t;
+
+			constexpr int64_t Fixed_Point_Log2_100 = 435411;
+			uint32_t smoother = 1 << 16;
 			if (0 != config.BlockTimeSmoothingFactor) {
-				double factor = config.BlockTimeSmoothingFactor / 1000.0;
-				smoother = std::min(std::exp(factor * static_cast<int64_t>(timeDiff - targetTime) / targetTime), 100.0);
+				uint128_t factor = config.BlockTimeSmoothingFactor << 16;
+				factor = (factor << 16) / (1000u << 16);
+
+				auto targetTime = static_cast<int128_t>(config.BlockGenerationTargetTime.seconds() << 16);
+				auto elapsedTime = static_cast<int128_t>(timeDiff << 16);
+
+				// multiply by log2(e), use precision that does not lead to an overflow
+				auto power = static_cast<int128_t>(factor) * (elapsedTime - targetTime) / targetTime;
+				power = power * 14'426'950'408 / 10'000'000'000;
+
+				// lowend cap is necessary because the calculation of the power of two only works within a certain range
+				if (-(5 << 16) > power)
+					smoother = 0;
+				else if (Fixed_Point_Log2_100 < power)
+					smoother = 100 << 16;
+				else
+					smoother = utils::FixedPointPowerOfTwo(static_cast<int32_t>(power));
 			}
 
-			BlockTarget target(static_cast<uint64_t>(Two_To_54 * smoother));
+			BlockTarget target(static_cast<uint64_t>(smoother) << 38);
 			target <<= 10;
 			return target;
 		}
@@ -155,7 +175,7 @@ namespace catapult { namespace chain {
 			const model::Block& parentBlock,
 			const model::Block& block,
 			const GenerationHash& generationHash) const {
-		auto importance = m_importanceLookup(block.Signer, block.Height);
+		auto importance = m_importanceLookup(block.SignerPublicKey, block.Height);
 		auto hit = CalculateHit(generationHash);
 		auto target = CalculateTarget(parentBlock, block, importance, m_config);
 		return hit < target;

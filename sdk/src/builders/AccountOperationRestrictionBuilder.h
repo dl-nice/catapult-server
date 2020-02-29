@@ -37,14 +37,17 @@ namespace catapult { namespace builders {
 		AccountOperationRestrictionBuilder(model::NetworkIdentifier networkIdentifier, const Key& signer);
 
 	public:
-		/// Sets the account restriction type to \a restrictionType.
-		void setRestrictionType(model::AccountRestrictionType restrictionType);
+		/// Sets the account restriction flags to \a restrictionFlags.
+		void setRestrictionFlags(model::AccountRestrictionFlags restrictionFlags);
 
-		/// Adds \a modification to account restriction modifications.
-		void addModification(const model::AccountOperationRestrictionModification& modification);
+		/// Adds \a restrictionAddition to account restriction additions.
+		void addRestrictionAddition(model::EntityType restrictionAddition);
+
+		/// Adds \a restrictionDeletion to account restriction deletions.
+		void addRestrictionDeletion(model::EntityType restrictionDeletion);
 
 	public:
-		/// Returns size of account operation restriction transaction.
+		/// Gets the size of account operation restriction transaction.
 		/// \note This returns size of a normal transaction not embedded transaction.
 		size_t size() const;
 
@@ -62,7 +65,8 @@ namespace catapult { namespace builders {
 		std::unique_ptr<TTransaction> buildImpl() const;
 
 	private:
-		model::AccountRestrictionType m_restrictionType;
-		std::vector<model::AccountOperationRestrictionModification> m_modifications;
+		model::AccountRestrictionFlags m_restrictionFlags;
+		std::vector<model::EntityType> m_restrictionAdditions;
+		std::vector<model::EntityType> m_restrictionDeletions;
 	};
 }}

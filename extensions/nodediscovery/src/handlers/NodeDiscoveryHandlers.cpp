@@ -30,28 +30,32 @@ namespace catapult { namespace handlers {
 
 	void RegisterNodeDiscoveryPushPingHandler(
 			ionet::ServerPacketHandlers& handlers,
-			model::NetworkIdentifier networkIdentifier,
+			const model::UniqueNetworkFingerprint& networkFingerprint,
 			const NodeConsumer& nodeConsumer) {
-		handlers.registerHandler(ionet::PacketType::Node_Discovery_Push_Ping, [networkIdentifier, nodeConsumer](
+		handlers.registerHandler(ionet::PacketType::Node_Discovery_Push_Ping, [networkFingerprint, nodeConsumer](
 				const auto& packet,
 				const auto& context) {
 			ionet::Node node;
 			if (!nodediscovery::TryParseNodePacket(packet, node))
 				return;
 
-			if (!nodediscovery::IsNodeCompatible(node, networkIdentifier, context.key())) {
+			if (!nodediscovery::IsNodeCompatible(node, networkFingerprint, context.key())) {
 				CATAPULT_LOG(warning)
 						<< "ignoring ping packet for incompatible node (identity = "
-						<< node.identityKey() << ", network = " << node.metadata().NetworkIdentifier << ")";
+						<< node.identity() << ", network = " << node.metadata().NetworkFingerprint << ")";
 				return;
 			}
 
-			if (node.endpoint().Host.empty()) {
-				auto endpoint = ionet::NodeEndpoint{ context.host(), node.endpoint().Port };
-				CATAPULT_LOG(debug) << "auto detected host '" << endpoint.Host << "' for " << node.identityKey();
-				node = ionet::Node(node.identityKey(), endpoint, node.metadata());
+			auto identity = model::NodeIdentity{ node.identity().PublicKey, context.host() };
+			auto endpoint = node.endpoint();
+
+			if (endpoint.Host.empty()) {
+				endpoint.Host = identity.Host;
+				CATAPULT_LOG(debug) << "auto detected host '" << endpoint.Host << "' for " << identity;
 			}
 
+			node = ionet::Node(identity, endpoint, node.metadata());
+			CATAPULT_LOG(debug) << "processing ping from " << node;
 			nodeConsumer(node);
 		});
 	}

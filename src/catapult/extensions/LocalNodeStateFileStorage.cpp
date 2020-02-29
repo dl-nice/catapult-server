@@ -58,13 +58,41 @@ namespace catapult { namespace extensions {
 
 	// endregion
 
-	// region LoadStateFromDirectory
+	// region LoadDependentStateFromDirectory
 
 	namespace {
 		io::BufferedInputFileStream OpenInputStream(const config::CatapultDirectory& directory, const std::string& filename) {
 			return io::BufferedInputFileStream(io::RawFile(directory.file(filename), io::OpenMode::Read_Only));
 		}
 
+		void LoadDependentStateFromDirectory(
+				const config::CatapultDirectory& directory,
+				cache::CatapultCache& cache,
+				cache::SupplementalData& supplementalData) {
+			// load supplemental data
+			Height chainHeight;
+			{
+				auto inputStream = OpenInputStream(directory, Supplemental_Data_Filename);
+				cache::LoadSupplementalData(inputStream, supplementalData, chainHeight);
+			}
+
+			// commit changes
+			auto cacheDelta = cache.createDelta();
+			cacheDelta.dependentState() = supplementalData.State;
+			cache.commit(chainHeight);
+		}
+	}
+
+	void LoadDependentStateFromDirectory(const config::CatapultDirectory& directory, cache::CatapultCache& cache) {
+		cache::SupplementalData supplementalData;
+		LoadDependentStateFromDirectory(directory, cache, supplementalData);
+	}
+
+	// endregion
+
+	// region LoadStateFromDirectory
+
+	namespace {
 		bool LoadStateFromDirectory(
 				const config::CatapultDirectory& directory,
 				cache::CatapultCache& cache,
@@ -80,15 +108,7 @@ namespace catapult { namespace extensions {
 			}
 
 			// 2. load supplemental data
-			Height chainHeight;
-			{
-				auto inputStream = OpenInputStream(directory, Supplemental_Data_Filename);
-				cache::LoadSupplementalData(inputStream, supplementalData, chainHeight);
-			}
-
-			// 3. commit changes
-			auto cacheDelta = cache.createDelta();
-			cache.commit(chainHeight);
+			LoadDependentStateFromDirectory(directory, cache, supplementalData);
 			return true;
 		}
 	}
@@ -99,7 +119,6 @@ namespace catapult { namespace extensions {
 			const plugins::PluginManager& pluginManager) {
 		cache::SupplementalData supplementalData;
 		if (LoadStateFromDirectory(directory, stateRef.Cache, supplementalData)) {
-			stateRef.State = supplementalData.State;
 			stateRef.Score += supplementalData.ChainScore;
 		} else {
 			auto cacheDelta = stateRef.Cache.createDelta();
@@ -150,12 +169,10 @@ namespace catapult { namespace extensions {
 	LocalNodeStateSerializer::LocalNodeStateSerializer(const config::CatapultDirectory& directory) : m_directory(directory)
 	{}
 
-	void LocalNodeStateSerializer::save(
-			const cache::CatapultCache& cache,
-			const state::CatapultState& state,
-			const model::ChainScore& score) const {
+	void LocalNodeStateSerializer::save(const cache::CatapultCache& cache, const model::ChainScore& score) const {
 		auto cacheStorages = cache.storages();
 		auto cacheView = cache.createView();
+		const auto& state = cacheView.dependentState();
 		auto height = cacheView.height();
 		SaveStateToDirectory(m_directory, cacheStorages, state, score, height, [&cacheView](const auto& storage, auto& outputStream) {
 			storage.saveAll(cacheView, outputStream);
@@ -165,9 +182,9 @@ namespace catapult { namespace extensions {
 	void LocalNodeStateSerializer::save(
 			const cache::CatapultCacheDelta& cacheDelta,
 			const std::vector<std::unique_ptr<const cache::CacheStorage>>& cacheStorages,
-			const state::CatapultState& state,
 			const model::ChainScore& score,
 			Height height) const {
+		const auto& state = cacheDelta.dependentState();
 		SaveStateToDirectory(m_directory, cacheStorages, state, score, height, [&cacheDelta](const auto& storage, auto& outputStream) {
 			storage.saveSummary(cacheDelta, outputStream);
 		});
@@ -193,13 +210,12 @@ namespace catapult { namespace extensions {
 			const config::CatapultDataDirectory& dataDirectory,
 			const config::NodeConfiguration& nodeConfig,
 			const cache::CatapultCache& cache,
-			const state::CatapultState& state,
 			const model::ChainScore& score) {
 		SetCommitStep(dataDirectory, consumers::CommitOperationStep::Blocks_Written);
 
 		LocalNodeStateSerializer serializer(dataDirectory.dir("state.tmp"));
 
-		if (nodeConfig.ShouldUseCacheDatabaseStorage) {
+		if (nodeConfig.EnableCacheDatabaseStorage) {
 			auto storages = const_cast<const cache::CatapultCache&>(cache).storages();
 			auto height = cache.createView().height();
 
@@ -207,9 +223,9 @@ namespace catapult { namespace extensions {
 			auto cacheDetachedDelta = cacheDetachableDelta.detach();
 			auto pCacheDelta = cacheDetachedDelta.tryLock();
 
-			serializer.save(*pCacheDelta, storages, state, score, height);
+			serializer.save(*pCacheDelta, storages, score, height);
 		} else {
-			serializer.save(cache, state, score);
+			serializer.save(cache, score);
 		}
 
 		SetCommitStep(dataDirectory, consumers::CommitOperationStep::State_Written);

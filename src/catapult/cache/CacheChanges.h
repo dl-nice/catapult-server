@@ -29,13 +29,13 @@ namespace catapult { namespace cache {
 
 	/// Deserialized cache changes for a single cache.
 	/// \note This is used for tagging.
-	struct MemoryCacheChanges : public utils::NonCopyable {
+	struct PLUGIN_API_DEPENDENCY MemoryCacheChanges : public utils::NonCopyable {
 		virtual ~MemoryCacheChanges() = default;
 	};
 
 	/// Deserialized cache changes for a single cache.
 	template<typename TValue>
-	struct MemoryCacheChangesT : public MemoryCacheChanges {
+	struct PLUGIN_API_DEPENDENCY MemoryCacheChangesT : public MemoryCacheChanges {
 		/// Added elements.
 		std::vector<TValue> Added;
 
@@ -58,7 +58,7 @@ namespace catapult { namespace cache {
 	template<typename TCacheDelta, typename TValue>
 	class SingleCacheChangesT : public SingleCacheChanges {
 	private:
-		using PointerContainer = std::unordered_set<const TValue*>;
+		using PointerContainer = decltype(reinterpret_cast<const TCacheDelta*>(0)->addedElements());
 
 	public:
 		/// Creates changes around \a cacheDelta.
@@ -74,17 +74,17 @@ namespace catapult { namespace cache {
 		{}
 
 	public:
-		/// Gets pointers to all added elements.
+		/// Gets the pointers to all added elements.
 		PointerContainer addedElements() const {
 			return m_pCacheDelta ? m_pCacheDelta->addedElements() : CollectAllPointers(m_pMemoryCacheChanges->Added);
 		}
 
-		/// Gets pointers to all modified elements.
+		/// Gets the pointers to all modified elements.
 		PointerContainer modifiedElements() const {
 			return m_pCacheDelta ? m_pCacheDelta->modifiedElements() : CollectAllPointers(m_pMemoryCacheChanges->Copied);
 		}
 
-		/// Gets pointers to all removed elements.
+		/// Gets the pointers to all removed elements.
 		PointerContainer removedElements() const {
 			return m_pCacheDelta ? m_pCacheDelta->removedElements() : CollectAllPointers(m_pMemoryCacheChanges->Removed);
 		}

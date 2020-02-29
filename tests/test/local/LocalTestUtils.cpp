@@ -24,6 +24,7 @@
 #include "catapult/crypto/KeyUtils.h"
 #include "catapult/extensions/PluginUtils.h"
 #include "catapult/plugins/PluginLoader.h"
+#include "catapult/utils/NetworkTime.h"
 #include "tests/test/net/NodeTestUtils.h"
 #include "tests/test/nodeps/MijinConstants.h"
 #include "tests/test/nodeps/Nemesis.h"
@@ -33,6 +34,7 @@
 namespace catapult { namespace test {
 
 	namespace {
+		constexpr auto Default_Network_Epoch_Adjustment = utils::TimeSpan::FromMilliseconds(1459468800000);
 		constexpr auto Local_Node_Private_Key = "4A236D9F894CF0C4FC8C042DB5DB41CCF35118B7B220163E5B4BC1872C1CD618";
 
 		void SetConnectionsSubConfiguration(config::NodeConfiguration::ConnectionsSubConfiguration& config) {
@@ -46,7 +48,9 @@ namespace catapult { namespace test {
 			auto config = config::NodeConfiguration::Uninitialized();
 			config.Port = GetLocalHostPort();
 			config.ApiPort = GetLocalHostPort() + 1;
-			config.ShouldAllowAddressReuse = true;
+			config.MaxIncomingConnectionsPerIdentity = 2;
+
+			config.EnableAddressReuse = true;
 
 			config.MaxBlocksPerSyncAttempt = 4 * 100;
 			config.MaxChainBytesPerSyncAttempt = utils::FileSize::FromKilobytes(8 * 512);
@@ -70,6 +74,8 @@ namespace catapult { namespace test {
 			config.MaxCacheDatabaseWriteBatchSize = utils::FileSize::FromMegabytes(5);
 			config.MaxTrackedNodes = 5'000;
 
+			config.BatchVerificationRandomSource = "/dev/urandom";
+
 			config.Local.Host = "127.0.0.1";
 			config.Local.FriendlyName = "LOCAL";
 			config.Local.Roles = ionet::NodeRoles::Peer;
@@ -78,6 +84,11 @@ namespace catapult { namespace test {
 
 			SetConnectionsSubConfiguration(config.IncomingConnections);
 			config.IncomingConnections.BacklogSize = 100;
+
+			config.Banning.DefaultBanDuration = utils::TimeSpan::FromHours(1);
+			config.Banning.MaxBanDuration = utils::TimeSpan::FromHours(2);
+			config.Banning.KeepAliveDuration = utils::TimeSpan::FromHours(3);
+			config.Banning.MaxBannedNodes = 10;
 			return config;
 		}
 
@@ -85,7 +96,12 @@ namespace catapult { namespace test {
 			network.Identifier = model::NetworkIdentifier::Mijin_Test;
 			network.PublicKey = crypto::KeyPair::FromString(Mijin_Test_Nemesis_Private_Key).publicKey();
 			network.GenerationHash = GetNemesisGenerationHash();
+			network.EpochAdjustment = Default_Network_Epoch_Adjustment;
 		}
+	}
+
+	supplier<Timestamp> CreateDefaultNetworkTimeSupplier() {
+		return []() { return utils::NetworkTime(Default_Network_Epoch_Adjustment).now(); };
 	}
 
 	crypto::KeyPair LoadServerKeyPair() {
@@ -106,12 +122,14 @@ namespace catapult { namespace test {
 		config.ImportanceGrouping = 1;
 		config.MaxRollbackBlocks = 10;
 		config.MaxDifficultyBlocks = 60;
+		config.DefaultDynamicFeeMultiplier = BlockFeeMultiplier(1);
 
 		config.InitialCurrencyAtomicUnits = Amount(8'999'999'998'000'000);
 		config.MaxMosaicAtomicUnits = Amount(9'000'000'000'000'000);
 
 		config.TotalChainImportance = Importance(17'000);
 		config.MinHarvesterBalance = Amount(500'000);
+		config.MaxHarvesterBalance = config.InitialCurrencyAtomicUnits;
 
 		config.BlockPruneInterval = 360;
 		config.MaxTransactionsPerBlock = 200'000;
@@ -122,7 +140,7 @@ namespace catapult { namespace test {
 		MutableCatapultConfiguration config;
 		config.BlockChain.ImportanceGrouping = 1;
 		config.BlockChain.MaxRollbackBlocks = 0;
-		config.User.BootKey = Local_Node_Private_Key;
+		config.User.BootPrivateKey = Local_Node_Private_Key;
 		return config.ToConst();
 	}
 
@@ -141,7 +159,7 @@ namespace catapult { namespace test {
 		config.BlockChain = std::move(blockChainConfig);
 		config.Node = CreateNodeConfiguration();
 
-		config.User.BootKey = Local_Node_Private_Key;
+		config.User.BootPrivateKey = Local_Node_Private_Key;
 		config.User.DataDirectory = dataDirectory;
 		return config.ToConst();
 	}
@@ -170,10 +188,12 @@ namespace catapult { namespace test {
 				const model::BlockChainConfiguration& config,
 				const plugins::StorageConfiguration& storageConfig,
 				const config::InflationConfiguration& inflationConfig) {
-			std::vector<plugins::PluginModule> modules;
 			auto userConfig = config::UserConfiguration::Uninitialized();
+			userConfig.BootPrivateKey = ToString(Key());
+
+			std::vector<plugins::PluginModule> modules;
 			auto pPluginManager = std::make_shared<plugins::PluginManager>(config, storageConfig, userConfig, inflationConfig);
-			LoadPluginByName(*pPluginManager, modules, "", "catapult.coresystem");
+			LoadPluginByName(*pPluginManager, modules, "", "catapult.plugins.coresystem");
 
 			for (const auto& pair : config.Plugins)
 				LoadPluginByName(*pPluginManager, modules, "", pair.first);

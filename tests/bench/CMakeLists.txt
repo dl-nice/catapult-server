@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.2)
+cmake_minimum_required(VERSION 3.14)
 
 # find and set benchmark includes
 function(catapult_add_benchmark_dependencies TARGET_NAME)
@@ -18,6 +18,7 @@ function(catapult_bench_executable_target TARGET_NAME)
 	catapult_target(${TARGET_NAME})
 
 	add_dependencies(tools ${TARGET_NAME})
+	install(TARGETS ${TARGET_NAME})
 endfunction()
 
 add_subdirectory(crypto)

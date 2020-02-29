@@ -1,9 +1,10 @@
-cmake_minimum_required(VERSION 3.2)
+cmake_minimum_required(VERSION 3.14)
 
 catapult_add_gtest_dependencies()
 
 add_subdirectory(cache)
 add_subdirectory(core)
+add_subdirectory(crypto)
 add_subdirectory(local)
 add_subdirectory(nemesis)
 add_subdirectory(net)

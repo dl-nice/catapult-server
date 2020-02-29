@@ -29,9 +29,6 @@ namespace catapult { namespace cache {
 	/// Mixins used by the lock info cache delta.
 	template<typename TDescriptor, typename TCacheTypes>
 	struct LockInfoCacheDeltaMixins : public PatriciaTreeCacheMixins<typename TCacheTypes::PrimaryTypes::BaseSetDeltaType, TDescriptor> {
-		using Touch = HeightBasedTouchMixin<
-			typename TCacheTypes::PrimaryTypes::BaseSetDeltaType,
-			typename TCacheTypes::HeightGroupingTypes::BaseSetDeltaType>;
 		using Pruning = HeightBasedPruningMixin<
 			typename TCacheTypes::PrimaryTypes::BaseSetDeltaType,
 			typename TCacheTypes::HeightGroupingTypes::BaseSetDeltaType>;
@@ -48,7 +45,6 @@ namespace catapult { namespace cache {
 			, public LockInfoCacheDeltaMixins<TDescriptor, TCacheTypes>::PatriciaTreeDelta
 			, public LockInfoCacheDeltaMixins<TDescriptor, TCacheTypes>::ActivePredicate
 			, public LockInfoCacheDeltaMixins<TDescriptor, TCacheTypes>::BasicInsertRemove
-			, public LockInfoCacheDeltaMixins<TDescriptor, TCacheTypes>::Touch
 			, public LockInfoCacheDeltaMixins<TDescriptor, TCacheTypes>::Pruning
 			, public LockInfoCacheDeltaMixins<TDescriptor, TCacheTypes>::DeltaElements {
 	public:
@@ -64,7 +60,6 @@ namespace catapult { namespace cache {
 				, LockInfoCacheDeltaMixins<TDescriptor, TCacheTypes>::PatriciaTreeDelta(*lockInfoSets.pPrimary, lockInfoSets.pPatriciaTree)
 				, LockInfoCacheDeltaMixins<TDescriptor, TCacheTypes>::ActivePredicate(*lockInfoSets.pPrimary)
 				, LockInfoCacheDeltaMixins<TDescriptor, TCacheTypes>::BasicInsertRemove(*lockInfoSets.pPrimary)
-				, LockInfoCacheDeltaMixins<TDescriptor, TCacheTypes>::Touch(*lockInfoSets.pPrimary, *lockInfoSets.pHeightGrouping)
 				, LockInfoCacheDeltaMixins<TDescriptor, TCacheTypes>::Pruning(*lockInfoSets.pPrimary, *lockInfoSets.pHeightGrouping)
 				, LockInfoCacheDeltaMixins<TDescriptor, TCacheTypes>::DeltaElements(*lockInfoSets.pPrimary)
 				, m_pDelta(lockInfoSets.pPrimary)
@@ -79,7 +74,7 @@ namespace catapult { namespace cache {
 		/// Inserts \a value into the cache.
 		void insert(const typename TDescriptor::ValueType& value) {
 			LockInfoCacheDeltaMixins<TDescriptor, TCacheTypes>::BasicInsertRemove::insert(value);
-			AddIdentifierWithGroup(*m_pHeightGroupingDelta, value.Height, TDescriptor::GetKeyFromValue(value));
+			AddIdentifierWithGroup(*m_pHeightGroupingDelta, value.EndHeight, TDescriptor::GetKeyFromValue(value));
 		}
 
 		/// Removes the value identified by \a key from the cache.
@@ -87,14 +82,15 @@ namespace catapult { namespace cache {
 			auto iter = m_pDelta->find(key);
 			const auto* pLockInfo = iter.get();
 			if (!!pLockInfo)
-				RemoveIdentifierWithGroup(*m_pHeightGroupingDelta, pLockInfo->Height, key);
+				RemoveIdentifierWithGroup(*m_pHeightGroupingDelta, pLockInfo->EndHeight, key);
 
 			LockInfoCacheDeltaMixins<TDescriptor, TCacheTypes>::BasicInsertRemove::remove(key);
 		}
 
 		/// Processes all unused lock infos that expired at \a height by passing them to \a consumer
 		void processUnusedExpiredLocks(Height height, const consumer<const typename TDescriptor::ValueType>& consumer) const {
-			ForEachIdentifierWithGroup(utils::as_const(*m_pDelta), *m_pHeightGroupingDelta, height, [consumer](const auto& lockInfo) {
+			// use non-const set to touch all affected lock infos so that active to inactive transitions are visible
+			ForEachIdentifierWithGroup(*m_pDelta, *m_pHeightGroupingDelta, height, [consumer](const auto& lockInfo) {
 				if (state::LockStatus::Unused == lockInfo.Status)
 					consumer(lockInfo);
 			});

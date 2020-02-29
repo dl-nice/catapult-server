@@ -72,7 +72,7 @@ namespace catapult { namespace validators {
 			auto result = test::ValidateNotification(*pValidator, notificationBuilder.notification());
 
 			// Assert:
-			EXPECT_EQ(Failure_LockSecret_Hash_Not_Implemented, result)
+			EXPECT_EQ(Failure_LockSecret_Invalid_Hash_Algorithm, result)
 					<< "hash algorithm: " << utils::to_underlying_type(lockHashAlgorithm);
 		}
 	}
@@ -113,10 +113,6 @@ namespace catapult { namespace validators {
 
 	TEST(TEST_CLASS, SuccessWhenSecretMatchesProof_Sha3) {
 		AssertSuccessIfSecretMatchesProof(model::LockHashAlgorithm::Op_Sha3_256);
-	}
-
-	TEST(TEST_CLASS, SuccessWhenSecretMatchesProof_Keccak) {
-		AssertSuccessIfSecretMatchesProof(model::LockHashAlgorithm::Op_Keccak_256);
 	}
 
 	TEST(TEST_CLASS, SuccessWhenSecretMatchesProof_Bitcoin160) {

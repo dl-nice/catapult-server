@@ -26,7 +26,7 @@ namespace catapult { namespace disruptor {
 	/// Holds information about a consumer.
 	class ConsumerEntry {
 	public:
-		/// Creates an entry with a \a level and \a position.
+		/// Creates an entry with \a level and \a position.
 		explicit ConsumerEntry(size_t level)
 				: m_level(level)
 				, m_position(0)
@@ -38,12 +38,12 @@ namespace catapult { namespace disruptor {
 		}
 
 	public:
-		/// Returns current position (in the circular buffer).
+		/// Gets the current position (in the circular buffer).
 		PositionType position() const {
 			return m_position;
 		}
 
-		/// Returns consumer level.
+		/// Gets the consumer level.
 		size_t level() const {
 			return m_level;
 		}

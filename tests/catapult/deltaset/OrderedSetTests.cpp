@@ -97,7 +97,7 @@ DEFINE_IMMUTABLE_BASE_SET_TESTS_FOR(OrderedSetImmutable);
 		// Assert:
 		TTraits::AssertContents(*pSet, {
 			TTraits::CreateElement("TestElement", 1),
-			TTraits::CreateElement("MyTestElement", 123),
+			TTraits::CreateElement("MyTestElement", 123)
 		});
 	}
 
@@ -114,7 +114,7 @@ DEFINE_IMMUTABLE_BASE_SET_TESTS_FOR(OrderedSetImmutable);
 		// Assert:
 		TTraits::AssertContents(*pSet, {
 			TTraits::CreateElement("TestElement", 3),
-			TTraits::CreateElement("TestElement", 4),
+			TTraits::CreateElement("TestElement", 4)
 		});
 	}
 
@@ -139,7 +139,7 @@ DEFINE_IMMUTABLE_BASE_SET_TESTS_FOR(OrderedSetImmutable);
 		TTraits::AssertContents(*pSet, {
 			TTraits::CreateElement("TestElement", 2),
 			TTraits::CreateElement("TestElement", 3),
-			TTraits::CreateElement("TestElement", 4),
+			TTraits::CreateElement("TestElement", 4)
 		});
 	}
 
@@ -164,7 +164,7 @@ DEFINE_IMMUTABLE_BASE_SET_TESTS_FOR(OrderedSetImmutable);
 		TTraits::AssertContents(*pSet, {
 			TTraits::CreateElement("TestElement", 2),
 			TTraits::CreateElement("TestElement", 3),
-			TTraits::CreateElement("TestElement", 4),
+			TTraits::CreateElement("TestElement", 4)
 		});
 	}
 
@@ -186,8 +186,40 @@ DEFINE_IMMUTABLE_BASE_SET_TESTS_FOR(OrderedSetImmutable);
 		// Assert:
 		TTraits::AssertContents(*pSet, {
 			TTraits::CreateElement("TestElement", 3),
-			TTraits::CreateElement("TestElement", 4),
+			TTraits::CreateElement("TestElement", 4)
 		});
+	}
+
+	// endregion
+
+	// region iteration
+
+	ORDERED_SET_TEST(IterationWithReplacedElementPreservesOriginalOrder) {
+		// Arrange:
+		auto pSet = TTraits::CreateWithElements(6);
+		auto pDelta = pSet->rebase();
+
+		// - remove and reinsert the same element with a different dummy value
+		{
+			auto element = TTraits::CreateElement("TestElement", 3);
+			element.Dummy = 123;
+			pDelta->remove(element);
+			pDelta->insert(element);
+		}
+
+		// Act: iterate and collect values
+		std::vector<unsigned int> collectedValues;
+		std::vector<size_t> collectedDummys;
+		for (const auto& element : MakeIterableView(*pDelta)) {
+			collectedValues.push_back(element.Value);
+			collectedDummys.push_back(element.Dummy);
+		}
+
+		// Assert: iteration should be *ordered*
+		EXPECT_EQ(std::vector<unsigned int>({ 0, 1, 2, 3, 4, 5 }), collectedValues);
+
+		size_t expectedDummyValue = TTraits::IsElementMutable() ? 123 : 0;
+		EXPECT_EQ(std::vector<size_t>({ 0, 0, 0, expectedDummyValue, 0, 0 }), collectedDummys);
 	}
 
 	// endregion

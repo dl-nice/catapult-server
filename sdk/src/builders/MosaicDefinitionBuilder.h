@@ -21,7 +21,6 @@
 #pragma once
 #include "TransactionBuilder.h"
 #include "plugins/txes/mosaic/src/model/MosaicDefinitionTransaction.h"
-#include <vector>
 
 namespace catapult { namespace builders {
 
@@ -37,8 +36,11 @@ namespace catapult { namespace builders {
 		MosaicDefinitionBuilder(model::NetworkIdentifier networkIdentifier, const Key& signer);
 
 	public:
-		/// Sets the mosaic nonce to \a mosaicNonce.
-		void setMosaicNonce(MosaicNonce mosaicNonce);
+		/// Sets the mosaic duration to \a duration.
+		void setDuration(BlockDuration duration);
+
+		/// Sets the mosaic nonce to \a nonce.
+		void setNonce(MosaicNonce nonce);
 
 		/// Sets the mosaic flags to \a flags.
 		void setFlags(model::MosaicFlags flags);
@@ -46,11 +48,8 @@ namespace catapult { namespace builders {
 		/// Sets the mosaic divisibility to \a divisibility.
 		void setDivisibility(uint8_t divisibility);
 
-		/// Adds \a property to optional properties.
-		void addProperty(const model::MosaicProperty& property);
-
 	public:
-		/// Returns size of mosaic definition transaction.
+		/// Gets the size of mosaic definition transaction.
 		/// \note This returns size of a normal transaction not embedded transaction.
 		size_t size() const;
 
@@ -68,10 +67,10 @@ namespace catapult { namespace builders {
 		std::unique_ptr<TTransaction> buildImpl() const;
 
 	private:
-		MosaicNonce m_mosaicNonce;
-		MosaicId m_mosaicId;
+		MosaicId m_id;
+		BlockDuration m_duration;
+		MosaicNonce m_nonce;
 		model::MosaicFlags m_flags;
 		uint8_t m_divisibility;
-		std::vector<model::MosaicProperty> m_properties;
 	};
 }}

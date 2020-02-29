@@ -19,13 +19,10 @@
 **/
 
 #pragma once
-#include "catapult/types.h"
+#include "blockhashes/NemesisBlockHashesCalculator.h"
 #include <string>
 
-namespace catapult {
-	namespace config { class CatapultConfiguration; }
-	namespace model { struct BlockElement; }
-}
+namespace catapult { namespace config { class CatapultConfiguration; } }
 
 namespace catapult { namespace tools { namespace nemgen {
 
@@ -39,13 +36,7 @@ namespace catapult { namespace tools { namespace nemgen {
 	};
 
 	/// Nemesis block execution dependent hashes information.
-	struct NemesisExecutionHashesDescriptor {
-		/// Receipts hash.
-		Hash256 ReceiptsHash;
-
-		/// State hash.
-		Hash256 StateHash;
-
+	struct NemesisExecutionHashesDescriptor : public BlockExecutionHashesInfo {
 		/// Textual summary including sub cache hashes.
 		std::string Summary;
 	};

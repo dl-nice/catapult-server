@@ -23,6 +23,7 @@
 #include "NodePingRequestor.h"
 #include "PeersProcessor.h"
 #include "nodediscovery/src/handlers/NodeDiscoveryHandlers.h"
+#include "catapult/crypto/KeyPair.h"
 #include "catapult/extensions/NetworkUtils.h"
 #include "catapult/extensions/NodeInteractionUtils.h"
 #include "catapult/extensions/ServiceLocator.h"
@@ -90,7 +91,9 @@ namespace catapult { namespace nodediscovery {
 			}
 
 			void registerServices(extensions::ServiceLocator& locator, extensions::ServiceState& state) override {
-				auto networkIdentifier = state.config().BlockChain.Network.Identifier;
+				auto networkFingerprint = model::UniqueNetworkFingerprint(
+						state.config().BlockChain.Network.Identifier,
+						state.config().BlockChain.Network.GenerationHash);
 
 				// create callbacks
 				auto pushNodeConsumer = CreatePushNodeConsumer(state);
@@ -102,26 +105,35 @@ namespace catapult { namespace nodediscovery {
 						CreateNodePingRequestor,
 						locator.keyPair(),
 						connectionSettings,
-						networkIdentifier);
+						networkFingerprint);
 
 				locator.registerService(Service_Name, pNodePingRequestor);
 
 				// set handlers
 				auto& nodeContainer = state.nodes();
 				auto& pingRequestor = *pNodePingRequestor;
-				handlers::RegisterNodeDiscoveryPushPingHandler(state.packetHandlers(), networkIdentifier, pushNodeConsumer);
+				handlers::RegisterNodeDiscoveryPushPingHandler(state.packetHandlers(), networkFingerprint, pushNodeConsumer);
 				handlers::RegisterNodeDiscoveryPullPingHandler(state.packetHandlers(), m_pLocalNetworkNode);
 
 				auto pingRequestInitiator = [&pingRequestor](const auto& node, const auto& callback) {
 					return pingRequestor.beginRequest(node, callback);
 				};
-				PeersProcessor peersProcessor(nodeContainer, pingRequestInitiator, networkIdentifier, pushNodeConsumer);
+				PeersProcessor peersProcessor(
+						locator.keyPair().publicKey(),
+						nodeContainer,
+						pingRequestInitiator,
+						networkFingerprint,
+						pushNodeConsumer);
 				auto pushPeersHandler = [peersProcessor](const auto& candidateNodes) {
 					peersProcessor.process(candidateNodes);
 				};
 				handlers::RegisterNodeDiscoveryPushPeersHandler(state.packetHandlers(), pushPeersHandler);
 				handlers::RegisterNodeDiscoveryPullPeersHandler(state.packetHandlers(), [&nodeContainer]() {
-					return ionet::FindAllActiveNodes(nodeContainer.view());
+					return ionet::FindAllActiveNodes(nodeContainer.view(), [](auto source) {
+						// Dynamic_Incoming does not have public port
+						// Local does not have public host
+						return ionet::NodeSource::Dynamic == source || ionet::NodeSource::Static == source;
+					});
 				});
 
 				// add task

@@ -23,7 +23,7 @@
 #include "catapult/cache/SubCachePluginAdapter.h"
 #include "catapult/cache_core/AccountStateCache.h"
 #include "catapult/cache_core/AccountStateCacheStorage.h"
-#include "catapult/cache_core/BlockDifficultyCacheStorage.h"
+#include "catapult/cache_core/BlockStatisticCacheStorage.h"
 #include "catapult/model/BlockChainConfiguration.h"
 #include "tests/test/nodeps/Random.h"
 
@@ -39,6 +39,7 @@ namespace catapult { namespace test {
 				config.Network.Identifier,
 				config.ImportanceGrouping,
 				config.MinHarvesterBalance,
+				config.MaxHarvesterBalance,
 				config.CurrencyMosaicId,
 				config.HarvestingMosaicId
 			};
@@ -69,11 +70,13 @@ namespace catapult { namespace test {
 				cacheConfig,
 				CreateAccountStateCacheOptions(config));
 
-		subCaches[BlockDifficultyCache::Id] = MakeConfigurationFreeSubCachePlugin<BlockDifficultyCache, BlockDifficultyCacheStorage>(
+		subCaches[BlockStatisticCache::Id] = MakeConfigurationFreeSubCachePlugin<BlockStatisticCache, BlockStatisticCacheStorage>(
 				CalculateDifficultyHistorySize(config));
 	}
 
 	// endregion
+
+	// region CreateEmptyCatapultCache
 
 	cache::CatapultCache CreateEmptyCatapultCache() {
 		return CreateEmptyCatapultCache(model::BlockChainConfiguration::Uninitialized());
@@ -90,6 +93,10 @@ namespace catapult { namespace test {
 		CoreSystemCacheFactory::CreateSubCaches(config, cacheConfig, subCaches);
 		return cache::CatapultCache(std::move(subCaches));
 	}
+
+	// endregion
+
+	// region cache marker utils
 
 	cache::CatapultCache CreateCatapultCacheWithMarkerAccount() {
 		return CreateCatapultCacheWithMarkerAccount(Height(0));
@@ -125,4 +132,6 @@ namespace catapult { namespace test {
 	bool IsMarkedCache(const cache::CatapultCacheDelta& cache) {
 		return IsMarkedCacheT(cache);
 	}
+
+	// endregion
 }}

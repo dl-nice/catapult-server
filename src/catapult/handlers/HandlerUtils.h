@@ -28,7 +28,7 @@
 namespace catapult { namespace handlers {
 
 	/// Creates a push handler that forwards a received entity range to \a rangeHandler
-	/// given a \a registry composed of supported transaction types.
+	/// given a transaction \a registry composed of supported transaction types.
 	template<typename TEntity>
 	auto CreatePushEntityHandler(const model::TransactionRegistry& registry, const RangeHandler<TEntity>& rangeHandler) {
 		return [rangeHandler, &registry](const ionet::Packet& packet, const auto& context) {
@@ -41,7 +41,7 @@ namespace catapult { namespace handlers {
 			}
 
 			CATAPULT_LOG(trace) << "received valid " << packet;
-			rangeHandler({ std::move(range), context.key() });
+			rangeHandler({ std::move(range), { context.key(), context.host() } });
 		};
 	}
 }}

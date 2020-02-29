@@ -46,10 +46,10 @@ namespace catapult { namespace chain {
 		struct ExecuteTraits {
 			static constexpr auto Notify_Mode = observers::NotifyMode::Commit;
 
-			static std::vector<uint16_t> GetExpectedVersions(size_t numTransactions, uint16_t seed) {
-				std::vector<uint16_t> versions;
+			static std::vector<uint8_t> GetExpectedVersions(size_t numTransactions, uint8_t seed) {
+				std::vector<uint8_t> versions;
 
-				for (uint16_t i = 0u; i < numTransactions; ++i)
+				for (uint8_t i = 0u; i < numTransactions; ++i)
 					versions.push_back(seed + i + 1);
 
 				// block should be processed after all transactions
@@ -81,7 +81,7 @@ namespace catapult { namespace chain {
 		struct RollbackTraits {
 			static constexpr auto Notify_Mode = observers::NotifyMode::Rollback;
 
-			static std::vector<uint16_t> GetExpectedVersions(size_t numTransactions, uint16_t seed) {
+			static std::vector<uint8_t> GetExpectedVersions(size_t numTransactions, uint8_t seed) {
 				auto versions = ExecuteTraits::GetExpectedVersions(numTransactions, seed);
 				std::reverse(versions.begin(), versions.end());
 				return versions;
@@ -103,7 +103,7 @@ namespace catapult { namespace chain {
 			}
 		};
 
-		void SetVersions(model::Block& block, uint16_t seed) {
+		void SetVersions(model::Block& block, uint8_t seed) {
 			block.Version = seed;
 
 			for (auto& tx : block.Transactions())
@@ -118,7 +118,6 @@ namespace catapult { namespace chain {
 			// Assert:
 			for (const auto& context : contexts) {
 				EXPECT_EQ(&state.Cache, &context.Cache);
-				EXPECT_EQ(&state.State, &context.State);
 				EXPECT_EQ(height, context.Height);
 				EXPECT_EQ(mode, context.Mode);
 
@@ -142,8 +141,7 @@ namespace catapult { namespace chain {
 		auto pBlock = test::GenerateBlockWithTransactions(0, Height(10));
 		SetVersions(*pBlock, 22);
 
-		state::CatapultState catapultState;
-		observers::ObserverState state(delta, catapultState);
+		observers::ObserverState state(delta);
 
 		// Act:
 		TTraits::ProcessBlock(*pBlock, observer, state);
@@ -164,8 +162,7 @@ namespace catapult { namespace chain {
 		auto pBlock = test::GenerateBlockWithTransactions(7, Height(10));
 		SetVersions(*pBlock, 22);
 
-		state::CatapultState catapultState;
-		observers::ObserverState state(delta, catapultState);
+		observers::ObserverState state(delta);
 
 		// Act:
 		TTraits::ProcessBlock(*pBlock, observer, state);
@@ -185,8 +182,7 @@ namespace catapult { namespace chain {
 		mocks::MockEntityObserver observer;
 		auto pBlock = test::GenerateBlockWithTransactions(7, Height(10));
 
-		state::CatapultState catapultState;
-		observers::ObserverState state(delta, catapultState);
+		observers::ObserverState state(delta);
 
 		// Act:
 		TTraits::ProcessBlock(*pBlock, observer, state);
@@ -207,8 +203,7 @@ namespace catapult { namespace chain {
 		SetVersions(*pBlock1, 22);
 		SetVersions(*pBlock2, 79);
 
-		state::CatapultState catapultState;
-		observers::ObserverState state(delta, catapultState);
+		observers::ObserverState state(delta);
 
 		// Act:
 		TTraits::ProcessBlock(*pBlock1, observer, state);
@@ -218,8 +213,8 @@ namespace catapult { namespace chain {
 		const auto& versions = observer.versions();
 		EXPECT_EQ(10u, versions.size());
 		auto versionsSplitIter = versions.cbegin() + 6;
-		EXPECT_EQ(TTraits::GetExpectedVersions(5, 22), std::vector<uint16_t>(versions.cbegin(), versionsSplitIter));
-		EXPECT_EQ(TTraits::GetExpectedVersions(3, 79), std::vector<uint16_t>(versionsSplitIter, versions.cend()));
+		EXPECT_EQ(TTraits::GetExpectedVersions(5, 22), std::vector<uint8_t>(versions.cbegin(), versionsSplitIter));
+		EXPECT_EQ(TTraits::GetExpectedVersions(3, 79), std::vector<uint8_t>(versionsSplitIter, versions.cend()));
 
 		const auto& contexts = observer.contexts();
 		EXPECT_EQ(10u, observer.contexts().size());
@@ -237,8 +232,7 @@ namespace catapult { namespace chain {
 
 		{
 			auto delta = cache.createDelta();
-			state::CatapultState catapultState;
-			observers::ObserverState state(delta, catapultState);
+			observers::ObserverState state(delta);
 
 			// - add three accounts and queue a removal
 			Address address{ { 2 } };

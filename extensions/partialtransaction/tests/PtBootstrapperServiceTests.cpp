@@ -21,7 +21,6 @@
 #include "partialtransaction/src/PtBootstrapperService.h"
 #include "catapult/cache_tx/MemoryPtCache.h"
 #include "catapult/extensions/Results.h"
-#include "catapult/utils/NetworkTime.h"
 #include "tests/test/core/TransactionInfoTestUtils.h"
 #include "tests/test/local/ServiceLocatorTestContext.h"
 #include "tests/test/local/ServiceTestUtils.h"
@@ -185,7 +184,7 @@ namespace catapult { namespace partialtransaction {
 
 		// - seed the cache (deadlines t[+1]..t[+6])
 		auto transactionInfos = test::CreateTransactionInfos(6, [](auto i) {
-			return utils::NetworkTime() + utils::TimeSpan::FromHours(i + 1);
+			return test::CreateDefaultNetworkTimeSupplier()() + utils::TimeSpan::FromHours(i + 1);
 		});
 		auto& ptCache = GetMemoryPtCache(context.locator());
 		for (const auto& transactionInfo : transactionInfos)
@@ -220,7 +219,9 @@ namespace catapult { namespace partialtransaction {
 
 		// - seed the cache (deadlines t[+1.5]..t[-3.5])
 		auto transactionInfos = test::CreateTransactionInfos(6, [](auto i) {
-			return SubtractNonNegative(utils::NetworkTime(), utils::TimeSpan::FromHours(i)) + utils::TimeSpan::FromMinutes(90);
+			return SubtractNonNegative(
+					test::CreateDefaultNetworkTimeSupplier()(),
+					utils::TimeSpan::FromHours(i)) + utils::TimeSpan::FromMinutes(90);
 		});
 		auto& ptCache = GetMemoryPtCache(context.locator());
 		for (const auto& transactionInfo : transactionInfos)
@@ -248,7 +249,7 @@ namespace catapult { namespace partialtransaction {
 
 			// - compare a copy of the hash because the original (pruned) info is destroyed
 			EXPECT_EQ(*info.pEntity, status.Transaction) << message;
-			EXPECT_EQ(test::ToString(info.EntityHash), test::ToString(status.HashCopy)) << message;
+			EXPECT_EQ(info.EntityHash, status.HashCopy) << message;
 			EXPECT_EQ(utils::to_underlying_type(extensions::Failure_Extension_Partial_Transaction_Cache_Prune), status.Status) << message;
 		}
 	}
@@ -336,7 +337,7 @@ namespace catapult { namespace partialtransaction {
 
 			// - compare a copy of the hash because the original (removed) info is destroyed
 			EXPECT_EQ(*info.pEntity, status.Transaction) << message;
-			EXPECT_EQ(test::ToString(info.EntityHash), test::ToString(status.HashCopy)) << message;
+			EXPECT_EQ(info.EntityHash, status.HashCopy) << message;
 			EXPECT_EQ(expectedStatus, status.Status) << message;
 		}
 	}

@@ -78,10 +78,7 @@ namespace catapult { namespace observers {
 			BlockDuration gracePeriod = BlockDuration()) {
 		using ObserverType = FunctionalNotificationObserverT<model::BlockNotification>;
 		return std::make_unique<ObserverType>(name + "TouchObserver", [receiptType, gracePeriod](const auto&, auto& context) {
-			if (context.Height.unwrap() <= gracePeriod.unwrap())
-				return;
-
-			auto touchHeight = Height(context.Height.unwrap() - gracePeriod.unwrap());
+			auto touchHeight = Height(context.Height.unwrap() + gracePeriod.unwrap());
 			auto& cache = context.Cache.template sub<TCache>();
 			auto expiryIds = cache.touch(touchHeight);
 

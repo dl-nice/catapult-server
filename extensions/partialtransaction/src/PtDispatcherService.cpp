@@ -59,7 +59,7 @@ namespace catapult { namespace partialtransaction {
 		ConsumerDispatcherOptions CreateTransactionConsumerDispatcherOptions(const config::NodeConfiguration& config) {
 			auto options = ConsumerDispatcherOptions("partial transaction dispatcher", config.TransactionDisruptorSize);
 			options.ElementTraceInterval = config.TransactionElementTraceInterval;
-			options.ShouldThrowWhenFull = config.ShouldAbortWhenDispatcherIsFull;
+			options.ShouldThrowWhenFull = config.EnableDispatcherAbortWhenFull;
 			return options;
 		}
 
@@ -71,7 +71,8 @@ namespace catapult { namespace partialtransaction {
 		}
 
 		auto CreateKnownHashPredicate(const cache::MemoryPtCacheProxy& ptCache, ServiceState& state) {
-			auto knownHashPredicate = state.hooks().knownHashPredicate(state.utCache());
+			const auto& utCache = const_cast<const extensions::ServiceState&>(state).utCache();
+			auto knownHashPredicate = state.hooks().knownHashPredicate(utCache);
 			return [&ptCache, knownHashPredicate](auto timestamp, const auto& hash) {
 				return ptCache.view().find(hash) || knownHashPredicate(timestamp, hash);
 			};
@@ -162,7 +163,9 @@ namespace catapult { namespace partialtransaction {
 				extensions::ServiceState& state) {
 			locator.registerService(Service_Name, pDispatcher);
 
-			auto pBatchRangeDispatcher = std::make_shared<extensions::TransactionBatchRangeDispatcher>(*pDispatcher);
+			auto pBatchRangeDispatcher = std::make_shared<extensions::TransactionBatchRangeDispatcher>(
+					*pDispatcher,
+					state.config().BlockChain.Network.NodeEqualityStrategy);
 			locator.registerRootedService("pt.dispatcher.batch", pBatchRangeDispatcher);
 
 			// register hooks

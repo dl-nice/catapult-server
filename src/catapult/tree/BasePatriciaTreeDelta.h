@@ -28,7 +28,7 @@
 
 namespace catapult { namespace tree {
 
-	/// A delta on top of a base patricia tree that offers methods to set/unset nodes.
+	/// Delta on top of a base patricia tree that offers methods to set/unset nodes.
 	template<typename TEncoder, typename TDataSource, typename THasher>
 	class BasePatriciaTreeDelta {
 	private:
@@ -36,7 +36,7 @@ namespace catapult { namespace tree {
 		using ValueType = typename TEncoder::ValueType;
 
 	public:
-		/// Creates a tree around a \a dataSource with root \a rootHash.
+		/// Creates a tree around \a dataSource with root \a rootHash.
 		BasePatriciaTreeDelta(const TDataSource& dataSource, const Hash256& rootHash)
 				: m_dataSource(dataSource)
 				, m_baseRootHash(rootHash)
@@ -66,7 +66,7 @@ namespace catapult { namespace tree {
 			m_baseRootHash = rootHash;
 		}
 
-		/// Sets \a key to \a value in the tree.
+		/// Sets the \a value associated with \a key in the tree.
 		void set(const KeyType& key, const ValueType& value) {
 			return m_tree.set(key, value);
 		}

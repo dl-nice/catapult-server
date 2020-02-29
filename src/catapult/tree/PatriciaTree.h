@@ -31,7 +31,7 @@ namespace catapult { namespace tree {
 		using ValueType = typename TEncoder::ValueType;
 
 	public:
-		/// Creates a tree around a \a dataSource.
+		/// Creates a tree around \a dataSource.
 		explicit PatriciaTree(TDataSource& dataSource) : m_dataSource(dataSource)
 		{}
 
@@ -44,7 +44,7 @@ namespace catapult { namespace tree {
 		// region set
 
 	public:
-		/// Sets \a key to \a value in the tree.
+		/// Sets the \a value associated with \a key in the tree.
 		void set(const KeyType& key, const ValueType& value) {
 			auto keyPath = TreeNodePath(TEncoder::EncodeKey(key));
 			auto encodedValue = TEncoder::EncodeValue(value);
@@ -209,7 +209,7 @@ namespace catapult { namespace tree {
 
 			auto mergedPath = TreeNodePath::Join(branchNode.path(), lastLinkIndex, referencedNode.path());
 			referencedNode.setPath(mergedPath);
-			return std::move(referencedNode);
+			return referencedNode;
 		}
 
 		TreeNode updateBranchLink(BranchTreeNode&& branchNode, size_t linkIndex, const TreeNode& linkedNode) {

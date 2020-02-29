@@ -46,10 +46,13 @@ namespace catapult { namespace test {
 		None = 0,
 
 		/// Local node should harvest upon startup.
-		Should_Auto_Harvest = 2,
+		Should_Auto_Harvest = 2
 	};
 
-	/// Returns server key pair.
+	/// Creates a default network time supplier for use in local tests.
+	supplier<Timestamp> CreateDefaultNetworkTimeSupplier();
+
+	/// Gets the server key pair.
 	crypto::KeyPair LoadServerKeyPair();
 
 	/// Creates a prototypical block chain configuration that is safe to use in local tests.

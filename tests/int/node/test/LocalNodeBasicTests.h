@@ -20,6 +20,8 @@
 
 #pragma once
 #include "LocalNodeTestUtils.h"
+#include "catapult/config/CatapultDataDirectory.h"
+#include "catapult/io/IndexFile.h"
 #include "tests/test/core/BlockTestUtils.h"
 #include "tests/test/other/mocks/MockBlockChangeSubscriber.h"
 #include "tests/test/other/mocks/MockStateChangeSubscriber.h"
@@ -56,11 +58,7 @@ namespace catapult { namespace test {
 
 		static void AssertCanBootLocalNodeWithPeers() {
 			// Act: create the node with custom peers
-			auto keys = GenerateRandomDataVector<Key>(3);
 			TestContext context(NodeFlag::Custom_Peers | NodeFlag::With_Partner, {
-				CreateNamedNode(keys[0], "alice"),
-				CreateNamedNode(keys[1], "bob"),
-				CreateNamedNode(keys[2], "charlie"),
 				CreateLocalPartnerNode()
 			});
 
@@ -74,13 +72,10 @@ namespace catapult { namespace test {
 			TTraits::AssertBoot(stats);
 
 			// - check nodes
-			EXPECT_EQ(5u, nodes.size());
+			EXPECT_EQ(2u, nodes.size());
 			auto expectedContents = BasicNodeDataContainer{
 				{ LoadServerKeyPair().publicKey(), "LOCAL", ionet::NodeSource::Local },
-				{ CreateLocalPartnerNode().identityKey(), "PARTNER", ionet::NodeSource::Static },
-				{ keys[0], "alice", ionet::NodeSource::Static },
-				{ keys[1], "bob", ionet::NodeSource::Static },
-				{ keys[2], "charlie", ionet::NodeSource::Static }
+				{ CreateLocalPartnerNode().identity().PublicKey, "PARTNER", ionet::NodeSource::Static }
 			};
 			EXPECT_EQ(expectedContents, CollectAll(nodes));
 		}
@@ -115,19 +110,19 @@ namespace catapult { namespace test {
 			// Arrange:
 			TestContext context(NodeFlag::Regular);
 
-			auto key = GenerateRandomByteArray<Key>();
-			auto node = ionet::Node(key, ionet::NodeEndpoint(), ionet::NodeMetadata());
+			auto identity = model::NodeIdentity{ GenerateRandomByteArray<Key>(), "11.22.33.44" };
+			auto node = ionet::Node(identity);
 
 			// Sanity:
-			EXPECT_FALSE(context.localNode().nodes().contains(key));
+			EXPECT_FALSE(context.localNode().nodes().contains(identity));
 
 			// Act:
 			context.nodeSubscriber().notifyNode(node);
 
 			// Assert:
 			auto nodeContainerView = context.localNode().nodes();
-			ASSERT_TRUE(nodeContainerView.contains(key));
-			EXPECT_EQ(ionet::NodeSource::Dynamic, nodeContainerView.getNodeInfo(key).source());
+			ASSERT_TRUE(nodeContainerView.contains(identity));
+			EXPECT_EQ(ionet::NodeSource::Dynamic, nodeContainerView.getNodeInfo(identity).source());
 		}
 
 		// endregion
@@ -157,6 +152,11 @@ namespace catapult { namespace test {
 
 			EXPECT_EQ(1u, pStateChangeSubscriberRaw->numScoreChanges());
 			EXPECT_EQ(1u, pStateChangeSubscriberRaw->numStateChanges());
+
+			auto dataDirectory = config::CatapultDataDirectory(context.dataDirectory());
+			EXPECT_EQ(2u, io::IndexFile(dataDirectory.spoolDir("state_change").file("index_server.dat")).get());
+			EXPECT_EQ(2u, io::IndexFile(dataDirectory.spoolDir("state_change").file("index.dat")).get());
+			EXPECT_EQ(2u, io::IndexFile(dataDirectory.rootDir().file("commit_step.dat")).get());
 		}
 
 		static void AssertLocalNodeDoesNotTriggerNemesisSubscribersAtHeightTwo() {

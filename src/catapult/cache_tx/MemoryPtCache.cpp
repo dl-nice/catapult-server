@@ -65,12 +65,12 @@ namespace catapult { namespace cache {
 
 	public:
 		bool add(const Key& signer, const Signature& signature) {
-			if (weakCosignedTransactionInfo().hasCosigner(signer))
+			if (weakCosignedTransactionInfo().hasCosignatory(signer))
 				return false;
 
 			// insert cosignature into sorted vector
 			auto iter = m_cosignatures.begin();
-			while (m_cosignatures.end() != iter && iter->Signer < signer)
+			while (m_cosignatures.end() != iter && iter->SignerPublicKey < signer)
 				++iter;
 
 			m_cosignatures.insert(iter, { signer, signature });
@@ -171,12 +171,11 @@ namespace catapult { namespace cache {
 					uint64_t maxCacheSize,
 					PtDataContainer& transactionDataContainer,
 					std::set<state::TimestampedHash>& timestampedHashes,
-					utils::SpinReaderWriterLock::ReaderLockGuard&& readLock)
+					utils::SpinReaderWriterLock::WriterLockGuard&& writeLock)
 					: m_maxCacheSize(maxCacheSize)
 					, m_transactionDataContainer(transactionDataContainer)
 					, m_timestampedHashes(timestampedHashes)
-					, m_readLock(std::move(readLock))
-					, m_writeLock(m_readLock.promoteToWriter())
+					, m_writeLock(std::move(writeLock))
 			{}
 
 		public:
@@ -255,7 +254,6 @@ namespace catapult { namespace cache {
 			uint64_t m_maxCacheSize;
 			PtDataContainer& m_transactionDataContainer;
 			std::set<state::TimestampedHash>& m_timestampedHashes;
-			utils::SpinReaderWriterLock::ReaderLockGuard m_readLock;
 			utils::SpinReaderWriterLock::WriterLockGuard m_writeLock;
 		};
 	}
@@ -282,12 +280,12 @@ namespace catapult { namespace cache {
 	}
 
 	PtCacheModifierProxy MemoryPtCache::modifier() {
-		auto readLock = m_lock.acquireReader();
+		auto writeLock = m_lock.acquireWriter();
 		return PtCacheModifierProxy(std::make_unique<MemoryPtCacheModifier>(
 				m_options.MaxCacheSize,
 				m_pImpl->TransactionDataContainer,
 				m_pImpl->TimestampedHashes,
-				std::move(readLock)));
+				std::move(writeLock)));
 	}
 
 	// endregion

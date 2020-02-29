@@ -26,23 +26,23 @@ namespace catapult { namespace mongo {
 	namespace {
 		void StreamBalanceTransferReceipt(bsoncxx::builder::stream::document& builder, const model::BalanceTransferReceipt& receipt) {
 			builder
-					<< "sender" << mappers::ToBinary(receipt.Sender)
-					<< "recipient" << mappers::ToBinary(receipt.Recipient)
-					<< "mosaicId" << mappers::ToInt64(receipt.MosaicId)
-					<< "amount" << mappers::ToInt64(receipt.Amount);
+					<< "senderPublicKey" << mappers::ToBinary(receipt.SenderPublicKey)
+					<< "recipientAddress" << mappers::ToBinary(receipt.RecipientAddress)
+					<< "mosaicId" << mappers::ToInt64(receipt.Mosaic.MosaicId)
+					<< "amount" << mappers::ToInt64(receipt.Mosaic.Amount);
 		}
 
 		void StreamBalanceChangeReceipt(bsoncxx::builder::stream::document& builder, const model::BalanceChangeReceipt& receipt) {
 			builder
-					<< "account" << mappers::ToBinary(receipt.Account)
-					<< "mosaicId" << mappers::ToInt64(receipt.MosaicId)
-					<< "amount" << mappers::ToInt64(receipt.Amount);
+					<< "targetPublicKey" << mappers::ToBinary(receipt.TargetPublicKey)
+					<< "mosaicId" << mappers::ToInt64(receipt.Mosaic.MosaicId)
+					<< "amount" << mappers::ToInt64(receipt.Mosaic.Amount);
 		}
 
 		void StreamInflationReceipt(bsoncxx::builder::stream::document& builder, const model::InflationReceipt& receipt) {
 			builder
-					<< "mosaicId" << mappers::ToInt64(receipt.MosaicId)
-					<< "amount" << mappers::ToInt64(receipt.Amount);
+					<< "mosaicId" << mappers::ToInt64(receipt.Mosaic.MosaicId)
+					<< "amount" << mappers::ToInt64(receipt.Mosaic.Amount);
 		}
 	}
 

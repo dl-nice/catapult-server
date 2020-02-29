@@ -19,7 +19,6 @@
 **/
 
 #include "NemesisExecutionHasher.h"
-#include "blockhashes/NemesisBlockHashesCalculator.h"
 #include "catapult/config/CatapultConfiguration.h"
 #include "catapult/model/Elements.h"
 #include "catapult/utils/HexFormatter.h"
@@ -61,7 +60,7 @@ namespace catapult { namespace tools { namespace nemgen {
 			const model::BlockElement& blockElement,
 			const config::CatapultConfiguration& config,
 			CacheDatabaseCleanupMode databaseCleanupMode) {
-		if (!config.Node.ShouldUseCacheDatabaseStorage || !config.BlockChain.ShouldEnableVerifiableState)
+		if (!config.Node.EnableCacheDatabaseStorage || !config.BlockChain.EnableVerifiableState)
 			CATAPULT_LOG(warning) << "cache database storage and verifiable state must both be enabled to calculate state hash";
 
 		// in purge mode, clean up the data directory after each execution
@@ -81,10 +80,16 @@ namespace catapult { namespace tools { namespace nemgen {
 		out
 				<< "           Height: " << blockElement.Block.Height << std::endl
 				<< "  Generation Hash: " << blockElement.GenerationHash << std::endl
-				<< "Transactions Hash: " << blockElement.Block.BlockTransactionsHash << std::endl
+				<< "Transactions Hash: " << blockElement.Block.TransactionsHash << std::endl
 				<< "    Receipts Hash: " << blockExecutionHashesInfo.ReceiptsHash << std::endl
 				<< Format(blockExecutionHashesInfo);
 
-		return { blockExecutionHashesInfo.ReceiptsHash, blockExecutionHashesInfo.StateHash, out.str() };
+		NemesisExecutionHashesDescriptor descriptor;
+		descriptor.ReceiptsHash = blockExecutionHashesInfo.ReceiptsHash;
+		descriptor.StateHash = blockExecutionHashesInfo.StateHash;
+		descriptor.SubCacheMerkleRoots = blockExecutionHashesInfo.SubCacheMerkleRoots;
+		descriptor.pBlockStatement = std::move(blockExecutionHashesInfo.pBlockStatement);
+		descriptor.Summary = out.str();
+		return descriptor;
 	}
 }}}

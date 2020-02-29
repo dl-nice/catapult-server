@@ -29,6 +29,7 @@
 #include "catapult/utils/ExceptionLogging.h"
 #include "catapult/utils/Logging.h"
 #include "catapult/version/version.h"
+#include "catapult/preprocessor.h"
 #include <iostream>
 
 namespace catapult { namespace process {
@@ -54,7 +55,7 @@ namespace catapult { namespace process {
 			auto pBootstrapper = std::make_shared<utils::LoggingBootstrapper>();
 			pBootstrapper->addConsoleLogger(config::GetConsoleLoggerOptions(config.Console), *CreateLogFilter(config.Console));
 			pBootstrapper->addFileLogger(config::GetFileLoggerOptions(config.File), *CreateLogFilter(config.File));
-			return std::move(pBootstrapper);
+			return PORTABLE_MOVE(pBootstrapper);
 		}
 
 		[[noreturn]]
@@ -74,7 +75,7 @@ namespace catapult { namespace process {
 		// endregion
 
 		void Run(config::CatapultConfiguration&& config, ProcessOptions processOptions, const CreateProcessHost& createProcessHost) {
-			auto keyPair = crypto::KeyPair::FromString(config.User.BootKey);
+			auto keyPair = crypto::KeyPair::FromString(config.User.BootPrivateKey);
 
 			CATAPULT_LOG(info) << "booting process with public key " << crypto::FormatKey(keyPair.publicKey());
 			auto pProcessHost = createProcessHost(std::move(config), keyPair);

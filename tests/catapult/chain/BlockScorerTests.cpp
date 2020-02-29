@@ -135,7 +135,7 @@ namespace catapult { namespace chain {
 				EXPECT_LT(0.999999, ratio) << message;
 				EXPECT_GT(1.000001, ratio) << message;
 
-				value += 0x10;
+				value = static_cast<uint8_t>(value + 0x10);
 			}
 		}
 	}
@@ -427,11 +427,12 @@ namespace catapult { namespace chain {
 		expectedTarget *= multiplier; // magic number with smoothing multiplier
 		expectedTarget /= 50'000'000'000'000; // difficulty
 
-		// Assert:
-		EXPECT_EQ(expectedTarget, target);
+		// Assert: target is very close to expected target
+		EXPECT_GT(1.0001, expectedTarget.convert_to<double>() / target.convert_to<double>());
+		EXPECT_LT(0.9999, expectedTarget.convert_to<double>() / target.convert_to<double>());
 	}
 
-	TEST(TEST_CLASS, BlockTargetSmoothingIsCapped) {
+	TEST(TEST_CLASS, BlockTargetSmoothingIsCappedOnUpperEnd) {
 		// Act:
 		auto config = CreateConfiguration();
 		config.BlockGenerationTargetTime = utils::TimeSpan::FromSeconds(10);
@@ -440,6 +441,18 @@ namespace catapult { namespace chain {
 
 		// Assert:
 		auto expectedTarget = GetWellKnownBlockTarget(Max_Smoothing);
+		EXPECT_EQ(expectedTarget, target);
+	}
+
+	TEST(TEST_CLASS, BlockTargetSmoothingIsCappedOnLowerEnd) {
+		// Act:
+		auto config = CreateConfiguration();
+		config.BlockGenerationTargetTime = utils::TimeSpan::FromSeconds(1000);
+		config.BlockTimeSmoothingFactor = 6000;
+		auto target = CalculateBlockTarget(900, 1000, 72000, 50, config);
+
+		// Assert:
+		auto expectedTarget = GetWellKnownBlockTarget(0);
 		EXPECT_EQ(expectedTarget, target);
 	}
 
@@ -492,7 +505,7 @@ namespace catapult { namespace chain {
 
 		std::unique_ptr<model::Block> CreateBlock(Height height, uint32_t timestampSeconds, uint32_t difficultyTrillions) {
 			auto pBlock = std::make_unique<model::Block>();
-			pBlock->Signer = test::GenerateRandomByteArray<Key>();
+			pBlock->SignerPublicKey = test::GenerateRandomByteArray<Key>();
 			pBlock->Height = height;
 			SetTimestampSeconds(*pBlock, timestampSeconds);
 			SetDifficultyTrillions(*pBlock, difficultyTrillions);
@@ -517,7 +530,7 @@ namespace catapult { namespace chain {
 		EXPECT_TRUE(isHit);
 
 		ASSERT_EQ(1u, context.ImportanceLookupParams.size());
-		EXPECT_EQ(pCurrent->Signer, context.ImportanceLookupParams[0].first);
+		EXPECT_EQ(pCurrent->SignerPublicKey, context.ImportanceLookupParams[0].first);
 		EXPECT_EQ(pCurrent->Height, context.ImportanceLookupParams[0].second);
 	}
 
@@ -569,7 +582,7 @@ namespace catapult { namespace chain {
 		EXPECT_FALSE(isHit);
 
 		ASSERT_EQ(1u, context.ImportanceLookupParams.size());
-		EXPECT_EQ(pCurrent->Signer, context.ImportanceLookupParams[0].first);
+		EXPECT_EQ(pCurrent->SignerPublicKey, context.ImportanceLookupParams[0].first);
 		EXPECT_EQ(pCurrent->Height, context.ImportanceLookupParams[0].second);
 	}
 
@@ -621,7 +634,7 @@ namespace catapult { namespace chain {
 		EXPECT_FALSE(isHit);
 
 		ASSERT_EQ(1u, context.ImportanceLookupParams.size());
-		EXPECT_EQ(pCurrent->Signer, context.ImportanceLookupParams[0].first);
+		EXPECT_EQ(pCurrent->SignerPublicKey, context.ImportanceLookupParams[0].first);
 		EXPECT_EQ(pCurrent->Height, context.ImportanceLookupParams[0].second);
 	}
 

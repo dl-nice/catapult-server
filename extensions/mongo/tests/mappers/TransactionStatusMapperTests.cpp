@@ -31,18 +31,21 @@ namespace catapult { namespace mongo { namespace mappers {
 	TEST(TEST_CLASS, CanMapTransactionStatus) {
 		// Arrange:
 		auto hash = test::GenerateRandomByteArray<Hash256>();
-		auto status = 123456u;
 		auto deadline = Timestamp(321);
+		auto status = 123456u;
 
 		// Act:
-		auto document = ToDbModel(model::TransactionStatus(hash, status, deadline));
+		auto document = ToDbModel(model::TransactionStatus(hash, deadline, status));
+		auto documentView = document.view();
 
 		// Assert:
-		auto view = document.view();
-		EXPECT_EQ(3u, test::GetFieldCount(view));
+		EXPECT_EQ(1u, test::GetFieldCount(documentView));
 
-		EXPECT_EQ(hash, test::GetHashValue(view, "hash"));
-		EXPECT_EQ(123456u, test::GetUint32(view, "status"));
-		EXPECT_EQ(321u, test::GetUint64(view, "deadline"));
+		auto statusView = documentView["status"].get_document().view();
+		EXPECT_EQ(3u, test::GetFieldCount(statusView));
+
+		EXPECT_EQ(hash, test::GetHashValue(statusView, "hash"));
+		EXPECT_EQ(123456u, test::GetUint32(statusView, "code"));
+		EXPECT_EQ(321u, test::GetUint64(statusView, "deadline"));
 	}
 }}}

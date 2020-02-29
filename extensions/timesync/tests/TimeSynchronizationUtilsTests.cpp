@@ -41,6 +41,7 @@ namespace catapult { namespace timesync {
 		constexpr int64_t Warning_Threshold_Millis = 5'000;
 		constexpr Importance Total_Chain_Importance(1'000'000);
 		constexpr uint64_t Default_Threshold = 85;
+		constexpr auto Default_Epoch_Adjustment = utils::TimeSpan::FromMilliseconds(11223344556677);
 
 		class SimpleResultSupplier {
 		public:
@@ -135,11 +136,13 @@ namespace catapult { namespace timesync {
 					const std::vector<TimeSynchronizationSample>& samples,
 					size_t numValidNodes = std::numeric_limits<size_t>::max())
 					: Synchronizer(CreateEmptyAggregateFilter(), Total_Chain_Importance, Warning_Threshold_Millis)
-					, TimeSyncConfig{ 5 }
+					, TimeSyncConfig(TimeSynchronizationConfiguration::Uninitialized())
 					, RequestResultFutureSupplier(ExtractCommunicationTimestampsContainer(samples, NodeType::Remote), numValidNodes)
 					, ServiceTestState(CreateCache())
-					, pTimeSyncState(std::make_shared<TimeSynchronizationState>(Default_Threshold))
+					, pTimeSyncState(std::make_shared<TimeSynchronizationState>(Default_Epoch_Adjustment, Default_Threshold))
 					, NetworkTimeSupplier(ExtractCommunicationTimestampsContainer(samples, NodeType::Local)) {
+				TimeSyncConfig.MaxNodes = 5;
+
 				auto& mutableBlockChainConfig = const_cast<model::BlockChainConfiguration&>(ServiceTestState.config().BlockChain);
 				mutableBlockChainConfig.TotalChainImportance = Total_Chain_Importance;
 			}
@@ -222,7 +225,7 @@ namespace catapult { namespace timesync {
 			// zero roundtrip time is not realistic but identical send / receive timestamps are needed for tests since
 			// the calls to the network time provider are not guaranteed to be in a deterministic order
 			return timesync::TimeSynchronizationSample(
-					ionet::Node(test::GenerateRandomByteArray<Key>(), { "alice.com", 1234 }, { model::NetworkIdentifier::Zero, "alice" }),
+					test::GenerateRandomByteArray<Key>(),
 					test::CreateCommunicationTimestamps(0, 0),
 					test::CreateCommunicationTimestamps(timeOffset, timeOffset));
 		}
@@ -295,19 +298,11 @@ namespace catapult { namespace timesync {
 	// region retrieve samples
 
 	namespace {
-		ionet::NodeSet ExtractNodes(const std::vector<TimeSynchronizationSample>& samples) {
-			ionet::NodeSet nodes;
-			for (const auto& sample : samples)
-				nodes.insert(sample.node());
-
-			return nodes;
-		}
-
 		auto OrderSamples(const std::vector<TimeSynchronizationSample>& samples, const ionet::NodeSet& nodes) {
 			std::vector<TimeSynchronizationSample> orderedSamples;
 			for (const auto& node : nodes) {
 				auto iter = std::find_if(samples.cbegin(), samples.cend(), [node](const auto& sample) {
-					return sample.node() == node;
+					return sample.identityKey() == node.identity().PublicKey;
 				});
 				orderedSamples.push_back(*iter);
 			}
@@ -321,7 +316,10 @@ namespace catapult { namespace timesync {
 				size_t numValidNodes = std::numeric_limits<size_t>::max()) {
 			// Arrange:
 			auto keys = test::ExtractKeys(originalSamples);
-			auto nodes = ExtractNodes(originalSamples);
+
+			ionet::NodeSet nodes;
+			for (const auto& key : keys)
+				nodes.insert(ionet::Node({ key, "11.22.33.44" }));
 
 			// - need to reorder the samples to match the order of the nodes
 			auto orderedSamples = OrderSamples(originalSamples, nodes);

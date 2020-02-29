@@ -25,11 +25,19 @@
 
 namespace catapult { namespace validators {
 
-	// region Address
+	// region Address / Key
 
 	/// Validator that applies to all account address notifications and validates that:
 	/// - the address is valid and targets the expected network (\a networkIdentifier)
 	DECLARE_STATEFUL_VALIDATOR(Address, model::AccountAddressNotification)(model::NetworkIdentifier networkIdentifier);
+
+	/// Validator that applies to all account address notifications and validates that:
+	/// - the address is nonzero given the expected network (\a networkIdentifier)
+	DECLARE_STATELESS_VALIDATOR(ZeroAddress, model::AccountAddressNotification)(model::NetworkIdentifier networkIdentifier);
+
+	/// Validator that applies to all account public key notifications and validates that:
+	/// - the public key is nonzero
+	DECLARE_STATELESS_VALIDATOR(ZeroPublicKey, model::AccountPublicKeyNotification)();
 
 	// endregion
 
@@ -80,6 +88,14 @@ namespace catapult { namespace validators {
 	/// - fee is no greater than max fee
 	/// - max fee multiplier does not overflow 32-bit value
 	DECLARE_STATELESS_VALIDATOR(TransactionFee, model::TransactionFeeNotification)();
+
+	// endregion
+
+	// region Other
+
+	/// Validator that applies to all internal padding notifications and validates that:
+	/// - internal padding is zero
+	DECLARE_STATELESS_VALIDATOR(ZeroInternalPadding, model::InternalPaddingNotification)();
 
 	// endregion
 }}

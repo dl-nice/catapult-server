@@ -26,9 +26,8 @@
 namespace catapult { namespace extensions {
 
 	ExtensionManager::ExtensionManager() {
-		std::string prefix = "catapult.";
-		for (const auto& name : { "coresystem", "plugins.signature" })
-			m_systemPluginNames.push_back(prefix + name);
+		for (const auto& pluginName : { "catapult.plugins.coresystem", "catapult.plugins.signature" })
+			m_systemPluginNames.push_back(pluginName);
 	}
 
 	void ExtensionManager::registerSystemPlugin(const std::string& name) {
@@ -47,8 +46,8 @@ namespace catapult { namespace extensions {
 		return m_systemPluginNames;
 	}
 
-	ExtensionManager::NetworkTimeSupplier ExtensionManager::networkTimeSupplier() const {
-		return m_networkTimeSupplier ? m_networkTimeSupplier : &utils::NetworkTime;
+	ExtensionManager::NetworkTimeSupplier ExtensionManager::networkTimeSupplier(const utils::TimeSpan& epochAdjustment) const {
+		return m_networkTimeSupplier ? m_networkTimeSupplier : [epochAdjustment]() { return utils::NetworkTime(epochAdjustment).now(); };
 	}
 
 	void ExtensionManager::registerServices(ServiceLocator& locator, ServiceState& state) {

@@ -35,11 +35,10 @@ namespace catapult { namespace model {
 		Hash256 CalculateHash(const VerifiableEntity& entity, const RawBuffer& buffer, const GenerationHash* pGenerationHash) {
 			Hash256 entityHash;
 			crypto::Sha3_256_Builder sha3;
-			// "R" part of a signature
-			sha3.update({ entity.Signature.data(), Signature::Size / 2 });
 
-			// public key is added here to match Sign/Verify behavior, which explicitly hashes it
-			sha3.update(entity.Signer);
+			// add full signature and public key (this is different than Sign/Verify)
+			sha3.update(entity.Signature);
+			sha3.update(entity.SignerPublicKey);
 
 			if (pGenerationHash)
 				sha3.update(*pGenerationHash);
@@ -51,7 +50,9 @@ namespace catapult { namespace model {
 	}
 
 	Hash256 CalculateHash(const Block& block) {
-		return CalculateHash(block, EntityDataBuffer(block, sizeof(BlockHeader)), nullptr);
+		auto blockRawBuffer = EntityDataBuffer(block, sizeof(BlockHeader));
+		blockRawBuffer.Size -= Block::Footer_Size;
+		return CalculateHash(block, blockRawBuffer, nullptr);
 	}
 
 	Hash256 CalculateHash(const Transaction& transaction, const GenerationHash& generationHash) {

@@ -20,7 +20,7 @@
 
 #pragma once
 #include "catapult/cache/ReadOnlyArtifactCache.h"
-#include "catapult/model/NetworkInfo.h"
+#include "catapult/model/NetworkIdentifier.h"
 #include "catapult/state/AccountState.h"
 
 namespace catapult {
@@ -32,7 +32,7 @@ namespace catapult {
 
 namespace catapult { namespace cache {
 
-	/// A read-only overlay on top of an account cache.
+	/// Read-only overlay on top of an account cache.
 	class ReadOnlyAccountStateCache
 			: public ReadOnlyArtifactCache<BasicAccountStateCacheView, BasicAccountStateCacheDelta, Address, state::AccountState>
 			, public ReadOnlyArtifactCache<BasicAccountStateCacheView, BasicAccountStateCacheDelta, Key, state::AccountState> {
@@ -59,6 +59,9 @@ namespace catapult { namespace cache {
 
 		/// Gets the minimum harvester balance.
 		Amount minHarvesterBalance() const;
+
+		/// Gets the maximum harvester balance.
+		Amount maxHarvesterBalance() const;
 
 		/// Gets the harvesting mosaic id.
 		MosaicId harvestingMosaicId() const;

@@ -75,17 +75,20 @@ namespace catapult { namespace config {
 	ionet::Node ToLocalNode(const CatapultConfiguration& config) {
 		const auto& localNodeConfig = config.Node.Local;
 
-		auto identityKey = crypto::KeyPair::FromString(config.User.BootKey).publicKey();
+		auto identityKey = crypto::KeyPair::FromString(config.User.BootPrivateKey).publicKey();
 
 		auto endpoint = ionet::NodeEndpoint();
 		endpoint.Host = localNodeConfig.Host;
 		endpoint.Port = config.Node.Port;
 
-		auto metadata = ionet::NodeMetadata(config.BlockChain.Network.Identifier);
+		auto networkFingerprint = model::UniqueNetworkFingerprint(
+				config.BlockChain.Network.Identifier,
+				config.BlockChain.Network.GenerationHash);
+		auto metadata = ionet::NodeMetadata(networkFingerprint);
 		metadata.Name = localNodeConfig.FriendlyName;
 		metadata.Version = ionet::NodeVersion(localNodeConfig.Version);
 		metadata.Roles = localNodeConfig.Roles;
 
-		return ionet::Node(identityKey, endpoint, metadata);
+		return ionet::Node({ identityKey, "127.0.0.1" }, endpoint, metadata);
 	}
 }}

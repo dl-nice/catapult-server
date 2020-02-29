@@ -26,6 +26,8 @@
 #include "catapult/crypto/Signer.h"
 #include "catapult/model/VerifiableEntity.h"
 #include "catapult/utils/HexParser.h"
+#include "catapult/preprocessor.h"
+#include "tests/test/nodeps/KeyTestUtils.h"
 #include "tests/test/nodeps/TestConstants.h"
 #include <memory>
 
@@ -48,9 +50,10 @@ namespace catapult { namespace test {
 
 	std::unique_ptr<model::Transaction> GenerateRandomTransaction(const Key& signer) {
 		auto pTransaction = mocks::CreateMockTransaction(12);
-		pTransaction->Signer = signer;
-		pTransaction->Version = model::MakeVersion(model::NetworkIdentifier::Mijin_Test, 1);
-		return std::move(pTransaction);
+		pTransaction->SignerPublicKey = signer;
+		pTransaction->Version = 1;
+		pTransaction->Network = model::NetworkIdentifier::Mijin_Test;
+		return PORTABLE_MOVE(pTransaction);
 	}
 
 	MutableTransactions GenerateRandomTransactions(size_t count) {
@@ -87,16 +90,17 @@ namespace catapult { namespace test {
 		auto keyPair = crypto::KeyPair::FromString("4C730B716552D60D276D24EABD60CAB3BF15BC6824937A510639CEB08BC77821");
 
 		auto pTransaction = mocks::CreateMockTransaction(sizeof(uint64_t));
-		pTransaction->Signer = keyPair.publicKey();
+		pTransaction->SignerPublicKey = keyPair.publicKey();
 		pTransaction->Version = 1;
+		pTransaction->Network = model::NetworkIdentifier::Zero;
 		pTransaction->MaxFee = Amount(2468);
 		pTransaction->Deadline = Timestamp(45678);
-		pTransaction->Recipient = crypto::ParseKey("72B69A64B20AF34C3815073647C8A2354800E8E83B718303909ABDC0F38E7ED7");
+		pTransaction->RecipientPublicKey = crypto::ParseKey("72B69A64B20AF34C3815073647C8A2354800E8E83B718303909ABDC0F38E7ED7");
 		reinterpret_cast<uint64_t&>(*pTransaction->DataPtr()) = 12345;
 
 		auto generationHash = utils::ParseByteArray<GenerationHash>(test::Deterministic_Network_Generation_Hash_String);
 		extensions::TransactionExtensions(generationHash).sign(keyPair, *pTransaction);
-		return std::move(pTransaction);
+		return PORTABLE_MOVE(pTransaction);
 	}
 
 	namespace {
@@ -126,7 +130,7 @@ namespace catapult { namespace test {
 		return model::DetachedCosignature{
 			test::GenerateRandomByteArray<Key>(),
 			test::GenerateRandomByteArray<Signature>(),
-			test::GenerateRandomByteArray<Hash256>(),
+			test::GenerateRandomByteArray<Hash256>()
 		};
 	}
 }}

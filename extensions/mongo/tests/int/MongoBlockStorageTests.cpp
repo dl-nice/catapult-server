@@ -20,7 +20,7 @@
 
 #include "mongo/src/MongoBlockStorage.h"
 #include "mongo/src/MongoBulkWriter.h"
-#include "mongo/src/MongoChainInfoUtils.h"
+#include "mongo/src/MongoChainStatisticUtils.h"
 #include "mongo/src/MongoReceiptPlugin.h"
 #include "mongo/src/MongoTransactionMetadata.h"
 #include "catapult/model/BlockUtils.h"
@@ -137,7 +137,8 @@ namespace catapult { namespace mongo {
 			auto index = 0u;
 
 			for (const auto& pair : expectedStatements) {
-				test::AssertEqualTransactionStatement(pair.second, height, *iter, 4, index);
+				auto statementView = (*iter)["statement"].get_document().view();
+				test::AssertEqualTransactionStatement(pair.second, height, statementView, 3, index);
 				++iter;
 				++index;
 			}
@@ -154,7 +155,8 @@ namespace catapult { namespace mongo {
 			auto index = 0u;
 
 			for (const auto& pair : expectedStatements) {
-				TTraits::AssertResolutionStatement(pair.second, height, *iter, 4, index);
+				auto statementView = (*iter)["statement"].get_document().view();
+				TTraits::AssertResolutionStatement(pair.second, height, statementView, 3, index);
 				++iter;
 				++index;
 			}
@@ -167,15 +169,15 @@ namespace catapult { namespace mongo {
 			// we need to sort them upon retrieval because the assert below expects the same order as in the block statement
 
 			// transaction statements
-			auto filter = document() << "height" << static_cast<int64_t>(height.unwrap()) << finalize;
+			auto filter = document() << "statement.height" << static_cast<int64_t>(height.unwrap()) << finalize;
 			mongocxx::options::find options1;
-			options1.sort(document() << "source.primaryId" << 1 << finalize);
+			options1.sort(document() << "statement.source.primaryId" << 1 << finalize);
 			auto cursor1 = database["transactionStatements"].find(filter.view(), options1);
 			AssertTransactionStatements(height, blockStatement.TransactionStatements, cursor1);
 
 			// address resolution statements
 			mongocxx::options::find options2;
-			options2.sort(document() << "unresolved" << 1 << finalize);
+			options2.sort(document() << "statement.unresolved" << 1 << finalize);
 			auto cursor2 = database["addressResolutionStatements"].find(filter.view(), options2);
 			AssertResolutionStatements<test::AddressResolutionTraits>(height, blockStatement.AddressResolutionStatements, cursor2);
 
@@ -202,7 +204,7 @@ namespace catapult { namespace mongo {
 			auto totalFee = model::CalculateBlockTransactionsInfo(block).TotalFee;
 
 			auto filter = document() << "block.height" << static_cast<int64_t>(block.Height.unwrap()) << finalize;
-			auto result = database["blocks"].find_one(filter.view()).get();
+			auto result = database["blocks"].find_one(filter.view()).value();
 			auto view = result.view();
 
 			// block metadata
@@ -250,7 +252,7 @@ namespace catapult { namespace mongo {
 		void AssertNoBlock(mongocxx::database& database, Height height) {
 			auto filter = document() << "block.height" << static_cast<int64_t>(height.unwrap()) << finalize;
 			auto result = database["blocks"].find_one(filter.view());
-			EXPECT_FALSE(result.is_initialized());
+			EXPECT_FALSE(result.has_value());
 		}
 
 		void AssertNoBlockOrTransactions(Height height) {
@@ -332,7 +334,8 @@ namespace catapult { namespace mongo {
 
 		class TestContext final : public test::PrepareDatabaseMixin {
 		public:
-			explicit TestContext(size_t topHeight) : m_pStorage(CreateMongoBlockStorage(mocks::CreateMockTransactionMongoPlugin())) {
+			explicit TestContext(size_t topHeight, MongoErrorPolicy::Mode errorPolicyMode = MongoErrorPolicy::Mode::Strict)
+					: m_pStorage(CreateMongoBlockStorage(mocks::CreateMockTransactionMongoPlugin(), errorPolicyMode)) {
 				for (auto i = 1u; i <= topHeight; ++i) {
 					auto transactions = test::GenerateRandomTransactions(10);
 					m_blocks.push_back(test::GenerateBlockWithTransactions(transactions));
@@ -531,21 +534,21 @@ namespace catapult { namespace mongo {
 		auto connection = test::CreateDbConnection();
 		auto database = connection[test::DatabaseName()];
 		auto scoreDocument = document()
-				<< "$set"
-				<< open_document
-					<< "scoreHigh" << static_cast<int64_t>(12)
-					<< "scoreLow" << static_cast<int64_t>(98)
+				<< "$set" << open_document
+					<< "current.scoreHigh" << static_cast<int64_t>(12)
+					<< "current.scoreLow" << static_cast<int64_t>(98)
 				<< close_document << finalize;
-		TrySetChainInfoDocument(database, scoreDocument.view());
+		TrySetChainStatisticDocument(database, scoreDocument.view());
 
 		// Act:
 		context.saveBlocks();
 
 		// Assert: the score is unchanged
-		auto chainInfoDocument = GetChainInfoDocument(database);
-		EXPECT_EQ(4u, test::GetFieldCount(chainInfoDocument.view()));
-		EXPECT_EQ(12u, test::GetUint64(chainInfoDocument.view(), "scoreHigh"));
-		EXPECT_EQ(98u, test::GetUint64(chainInfoDocument.view(), "scoreLow"));
+		auto chainStatisticDocument = GetChainStatisticDocument(database);
+		auto currentView = chainStatisticDocument.view()["current"].get_document().view();
+		EXPECT_EQ(3u, test::GetFieldCount(currentView));
+		EXPECT_EQ(12u, test::GetUint64(currentView, "scoreHigh"));
+		EXPECT_EQ(98u, test::GetUint64(currentView, "scoreLow"));
 	}
 
 	TEST(TEST_CLASS, CannotSaveSameBlockTwiceWhenErrorModeIsStrict) {
@@ -575,6 +578,7 @@ namespace catapult { namespace mongo {
 
 		// Assert:
 		ASSERT_EQ(Height(1), pStorage->chainHeight());
+
 		AssertEqual(blockElement);
 
 		// - check collection sizes
@@ -583,6 +587,41 @@ namespace catapult { namespace mongo {
 		auto filter = document() << finalize;
 		EXPECT_EQ(1u, database["blocks"].count_documents(filter.view()));
 		EXPECT_EQ(3u, static_cast<size_t>(database["transactions"].count_documents(filter.view())));
+	}
+
+	TEST(TEST_CLASS, CanRewriteBlockAtLastBlockHeightWhenErrorModeIsIdempotent) {
+		// Arrange: create new block with same height as db
+		auto transactions = test::GenerateRandomTransactions(10);
+		auto pBlock = test::GenerateBlockWithTransactions(transactions);
+		pBlock->Height = Height(Multiple_Blocks_Count);
+		auto newBlockElement = test::BlockToBlockElement(*pBlock, test::GenerateRandomByteArray<Hash256>());
+		AddStatements(newBlockElement, { 0, 1, 2, 3 });
+
+		// - prepare db with blocks
+		TestContext context(Multiple_Blocks_Count, MongoErrorPolicy::Mode::Idempotent);
+		context.saveBlocks();
+
+		// Sanity:
+		ASSERT_EQ(Height(Multiple_Blocks_Count), context.storage().chainHeight());
+
+		// Act:
+		context.storage().saveBlock(newBlockElement);
+
+		// Assert: unmodified block elements
+		ASSERT_EQ(Height(Multiple_Blocks_Count), context.storage().chainHeight());
+
+		BlockElementCounts blockElementCounts;
+		for (auto i = 0u; i < context.elements().size() - 1; ++i) {
+			const auto& blockElement = context.elements()[i];
+			AssertEqual(blockElement);
+			blockElementCounts.AddCounts(blockElement);
+		}
+
+		// - new block element
+		AssertEqual(newBlockElement);
+		blockElementCounts.AddCounts(newBlockElement);
+
+		AssertCollectionSizes(blockElementCounts);
 	}
 
 	namespace {

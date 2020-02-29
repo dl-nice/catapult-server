@@ -34,7 +34,7 @@ namespace catapult { namespace extensions {
 
 			default:
 				return 0;
-			};
+			}
 		}
 
 		using NodeScorePairs = std::vector<std::pair<ionet::Node, uint32_t>>;
@@ -71,8 +71,8 @@ namespace catapult { namespace extensions {
 					nodesInfo.Actives.emplace_back(node, pConnectionState->Age);
 				} else {
 					auto interactions = nodeInfo.interactions(timestamp);
-					auto weight = CalculateWeight(interactions, generator(), [importanceRetriever, &publicKey = node.identityKey()]() {
-						return importanceRetriever(publicKey);
+					auto weight = CalculateWeight(interactions, generator(), [importanceRetriever, &node]() {
+						return importanceRetriever(node.identity().PublicKey);
 					});
 					nodesInfo.Candidates.emplace_back(node, weight * weightMultiplier);
 					nodesInfo.TotalCandidateWeight += nodesInfo.Candidates.back().Weight;
@@ -82,9 +82,9 @@ namespace catapult { namespace extensions {
 			return nodesInfo;
 		}
 
-		utils::KeySet FindRemoveCandidates(const NodeScorePairs& nodePairs, uint32_t maxConnections, uint32_t maxConnectionAge) {
+		model::NodeIdentitySet FindRemoveCandidates(const NodeScorePairs& nodePairs, uint32_t maxConnections, uint32_t maxConnectionAge) {
 			// never remove the last connection
-			utils::KeySet removeCandidates;
+			auto removeCandidates = model::CreateNodeIdentitySet(model::NodeIdentityEqualityStrategy::Key_And_Host);
 			if (nodePairs.size() <= 1)
 				return removeCandidates;
 
@@ -97,7 +97,7 @@ namespace catapult { namespace extensions {
 					break;
 
 				if (pair.second >= maxConnectionAge)
-					removeCandidates.emplace(pair.first.identityKey());
+					removeCandidates.emplace(pair.first.identity());
 			}
 
 			return removeCandidates;
@@ -154,13 +154,11 @@ namespace catapult { namespace extensions {
 			return addCandidates;
 		}
 
-		std::mt19937 generator((std::random_device()()));
-		auto generatorRange = generator.max() - generator.min();
+		utils::LowEntropyRandomGenerator generator;
+		std::uniform_int_distribution<uint64_t> distr(0, totalCandidateWeight);
 		std::vector<bool> usedNodeFlags(candidates.size(), false);
 		for (auto i = 0u; i < maxCandidates; ++i) {
-			// cast value to uint64_t to prevent multiplcation overflow below
-			auto randomValue = static_cast<uint64_t>(generator());
-			auto randomWeight = static_cast<uint32_t>(randomValue * totalCandidateWeight / generatorRange);
+			auto randomWeight = distr(generator);
 			auto index = FindCandidateIndex(candidates, usedNodeFlags, randomWeight);
 			auto& candidate = candidates[index];
 
@@ -177,8 +175,10 @@ namespace catapult { namespace extensions {
 			const NodeSelectionConfiguration& config,
 			const ImportanceRetriever& importanceRetriever) {
 		// 1. find compatible (service and role) nodes
+		//    need to use node container view because node candidates are held by reference
+		auto nodesView = nodes.view();
 		NodeSelectionResult result;
-		auto nodesInfo = FindServiceNodes(nodes.view(), config.ServiceId, config.RequiredRole, importanceRetriever);
+		auto nodesInfo = FindServiceNodes(nodesView, config.ServiceId, config.RequiredRole, importanceRetriever);
 
 		// 2. find removal candidates
 		auto numActiveNodes = nodesInfo.Actives.size();
@@ -195,13 +195,15 @@ namespace catapult { namespace extensions {
 		return result;
 	}
 
-	utils::KeySet SelectNodesForRemoval(
+	model::NodeIdentitySet SelectNodesForRemoval(
 			const ionet::NodeContainer& nodes,
 			const NodeAgingConfiguration& config,
 			const ImportanceRetriever& importanceRetriever) {
 		// 1. find compatible (service) nodes; always match all roles
+		//    need to use node container view because node candidates are held by reference
+		auto nodesView = nodes.view();
 		NodeSelectionResult result;
-		auto nodesInfo = FindServiceNodes(nodes.view(), config.ServiceId, ionet::NodeRoles::None, importanceRetriever);
+		auto nodesInfo = FindServiceNodes(nodesView, config.ServiceId, ionet::NodeRoles::None, importanceRetriever);
 
 		// 2. find removal candidates
 		// a. allow at most 1/4 of active nodes to be disconnected

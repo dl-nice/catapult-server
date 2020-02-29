@@ -25,18 +25,25 @@ namespace catapult { namespace ionet {
 
 	// region ServerPacketHandlerContext
 
+	ServerPacketHandlerContext::ServerPacketHandlerContext()
+			: m_pKey(nullptr)
+			, m_pHost(nullptr)
+			, m_hasResponse(false)
+			, m_defaultKey()
+	{}
+
 	ServerPacketHandlerContext::ServerPacketHandlerContext(const Key& key, const std::string& host)
-			: m_key(key)
-			, m_host(host)
+			: m_pKey(&key)
+			, m_pHost(&host)
 			, m_hasResponse(false)
 	{}
 
 	const Key& ServerPacketHandlerContext::key() const {
-		return m_key;
+		return !m_pKey ? m_defaultKey : *m_pKey;
 	}
 
 	const std::string& ServerPacketHandlerContext::host() const {
-		return m_host;
+		return !m_pHost ? m_defaultHost : *m_pHost;
 	}
 
 	bool ServerPacketHandlerContext::hasResponse() const {
@@ -67,8 +74,8 @@ namespace catapult { namespace ionet {
 
 	size_t ServerPacketHandlers::size() const {
 		size_t numHandlers = 0;
-		for (const auto& handler : m_handlers)
-			numHandlers += handler ? 1 : 0;
+		for (const auto& descriptor : m_descriptors)
+			numHandlers += descriptor.Handler ? 1 : 0;
 
 		return numHandlers;
 	}
@@ -84,39 +91,59 @@ namespace catapult { namespace ionet {
 	}
 
 	bool ServerPacketHandlers::canProcess(const Packet& packet) const {
-		return !!findHandler(packet);
+		return !!findDescriptor(packet);
+	}
+
+	namespace {
+		bool IsHostAllowed(const std::unordered_set<std::string>& hosts, const std::string& host) {
+			if (hosts.empty())
+				return true;
+
+			return std::any_of(hosts.cbegin(), hosts.cend(), [&host](const auto& allowedHost) {
+				return allowedHost == host;
+			});
+		}
 	}
 
 	bool ServerPacketHandlers::process(const Packet& packet, ContextType& context) const {
-		const auto* pHandler = findHandler(packet);
-		if (!pHandler)
+		const auto* pDescriptor = findDescriptor(packet);
+		if (!pDescriptor)
 			return false;
 
+		if (!IsHostAllowed(pDescriptor->AllowedHosts, context.host())) {
+			CATAPULT_LOG(warning) << "rejecting " << packet << " from " << context.host();
+			return false;
+		}
+
 		CATAPULT_LOG(trace) << "processing " << packet;
-		(*pHandler)(packet, context);
+		pDescriptor->Handler(packet, context);
 		return true;
+	}
+
+	void ServerPacketHandlers::setAllowedHosts(const std::unordered_set<std::string>& hosts) {
+		m_activeAllowedHosts = hosts;
 	}
 
 	void ServerPacketHandlers::registerHandler(PacketType type, const PacketHandler& handler) {
 		auto rawType = utils::to_underlying_type(type);
-		if (rawType >= m_handlers.size())
-			m_handlers.resize(rawType + 1);
+		if (rawType >= m_descriptors.size())
+			m_descriptors.resize(rawType + 1);
 
-		if (m_handlers[rawType])
+		if (m_descriptors[rawType].Handler)
 			CATAPULT_THROW_RUNTIME_ERROR_1("handler for type is already registered", rawType);
 
-		m_handlers[rawType] = handler;
+		m_descriptors[rawType] = { handler, m_activeAllowedHosts };
 	}
 
-	const ServerPacketHandlers::PacketHandler* ServerPacketHandlers::findHandler(const Packet& packet) const {
+	const ServerPacketHandlers::PacketHandlerDescriptor* ServerPacketHandlers::findDescriptor(const Packet& packet) const {
 		auto rawType = utils::to_underlying_type(packet.Type);
-		if (rawType >= m_handlers.size()) {
+		if (rawType >= m_descriptors.size()) {
 			CATAPULT_LOG(warning) << "requested unknown handler: " << packet;
 			return nullptr;
 		}
 
-		const auto& handler = m_handlers[rawType];
-		return handler ? &handler : nullptr;
+		const auto& descriptor = m_descriptors[rawType];
+		return descriptor.Handler ? &descriptor : nullptr;
 	}
 
 	// endregion

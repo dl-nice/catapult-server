@@ -19,7 +19,7 @@
 **/
 
 #pragma once
-#include "catapult/model/NetworkInfo.h"
+#include "catapult/model/NetworkIdentifier.h"
 #include "catapult/state/MosaicEntry.h"
 #include "catapult/state/RootNamespace.h"
 #include "catapult/utils/Hashers.h"
@@ -31,7 +31,7 @@ namespace catapult { namespace utils { class ConfigurationBag; } }
 
 namespace catapult { namespace tools { namespace nemgen {
 
-	/// A mosaic seed.
+	/// Mosaic seed.
 	struct MosaicSeed {
 		/// Mosaic name.
 		std::string Name;

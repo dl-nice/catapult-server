@@ -30,11 +30,11 @@ namespace catapult { namespace harvesting { struct BlockExecutionHashes; } }
 
 namespace catapult { namespace harvesting {
 
-	/// A class that creates new blocks.
+	/// Harvests new blocks.
 	class Harvester {
 	public:
-		/// Creates a harvester around a catapult \a cache, a block chain \a config, a \a beneficiary,
-		/// an unlocked accounts set (\a unlockedAccounts) and \a blockGenerator used to customize block generation.
+		/// Creates a harvester around catapult \a cache, block chain \a config, \a beneficiary,
+		/// unlocked accounts set (\a unlockedAccounts) and \a blockGenerator used to customize block generation.
 		Harvester(
 				const cache::CatapultCache& cache,
 				const model::BlockChainConfiguration& config,

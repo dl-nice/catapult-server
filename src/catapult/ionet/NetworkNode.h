@@ -31,20 +31,23 @@ namespace catapult { namespace ionet {
 		/// Size of the node.
 		uint32_t Size;
 
+		/// Version.
+		NodeVersion Version;
+
 		/// Unique node identifier (public key).
 		Key IdentityKey;
+
+		/// Network generation hash.
+		GenerationHash NetworkGenerationHash;
+
+		/// Role(s).
+		NodeRoles Roles;
 
 		/// Port.
 		uint16_t Port;
 
 		/// Network identifier.
 		model::NetworkIdentifier NetworkIdentifier;
-
-		/// Version.
-		NodeVersion Version;
-
-		/// Role(s).
-		NodeRoles Roles;
 
 		/// Size of the host in bytes.
 		uint8_t HostSize;
@@ -64,7 +67,7 @@ namespace catapult { namespace ionet {
 
 #pragma pack(pop)
 
-	/// Packs a \a node model into a network node.
+	/// Packs \a node model into a network node.
 	std::unique_ptr<NetworkNode> PackNode(const Node& node);
 
 	/// Unpacks a network node (\a networkNode) into a node model.

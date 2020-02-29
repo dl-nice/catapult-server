@@ -40,7 +40,7 @@ namespace catapult { namespace sync {
 						"",
 						{
 							{ "startDelay", "1m" },
-							{ "repeatDelay", "37s" },
+							{ "repeatDelay", "37s" }
 						}
 					}
 				};
@@ -83,7 +83,7 @@ namespace catapult { namespace sync {
 							{ "minDelay", "42s" },
 							{ "maxDelay", "14s" },
 							{ "numPhaseOneRounds", "17" },
-							{ "numTransitionRounds", "103" },
+							{ "numTransitionRounds", "103" }
 						}
 					}
 				};
@@ -194,7 +194,7 @@ namespace catapult { namespace sync {
 					{ "startDelay", "27m" }, { "minDelay", "34m" }, { "maxDelay", "35m" },
 					{ "numPhaseOneRounds", "65" }, { "numTransitionRounds", "11" }
 				}
-			},
+			}
 		});
 
 		// Act:
@@ -258,7 +258,7 @@ namespace catapult { namespace sync {
 		auto config = TasksConfiguration::LoadFromPath("../resources");
 
 		// Assert:
-		EXPECT_EQ(15u, config.Tasks.size());
+		EXPECT_EQ(16u, config.Tasks.size());
 
 		// - spot check one task
 		AssertContains(config, "harvesting task", TimeSpan::FromSeconds(30), TimeSpan::FromSeconds(1));

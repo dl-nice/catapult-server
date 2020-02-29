@@ -25,7 +25,7 @@
 
 namespace catapult { namespace validators {
 
-	/// A notification subscriber that validates notifications.
+	/// Notification subscriber that validates notifications.
 	class ValidatingNotificationSubscriber : public model::NotificationSubscriber {
 	public:
 		/// Creates a validating notification subscriber around \a validator.
@@ -41,11 +41,20 @@ namespace catapult { namespace validators {
 		}
 
 	public:
+		/// Sets a notification type exclusion \a filter.
+		void setExclusionFilter(const predicate<model::NotificationType>& filter) {
+			m_exclusionFilter = filter;
+		}
+
+	public:
 		void notify(const model::Notification& notification) override {
 			if (!IsSet(notification.Type, model::NotificationChannel::Validator))
 				return;
 
 			if (IsValidationResultFailure(m_result))
+				return;
+
+			if (m_exclusionFilter && m_exclusionFilter(notification.Type))
 				return;
 
 			auto result = m_validator.validate(notification);
@@ -55,5 +64,6 @@ namespace catapult { namespace validators {
 	private:
 		const stateless::NotificationValidator& m_validator;
 		ValidationResult m_result;
+		predicate<model::NotificationType> m_exclusionFilter;
 	};
 }}

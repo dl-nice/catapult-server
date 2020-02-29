@@ -58,6 +58,15 @@ namespace catapult { namespace validators {
 	/// Validation failed because a block was harvested by an ineligible harvester.
 	DEFINE_CORE_RESULT(Block_Harvester_Ineligible, 10);
 
+	/// Validation failed because an address is zero.
+	DEFINE_CORE_RESULT(Zero_Address, 11);
+
+	/// Validation failed because a public key is zero.
+	DEFINE_CORE_RESULT(Zero_Public_Key, 12);
+
+	/// Validation failed because internal padding is nonzero.
+	DEFINE_CORE_RESULT(Nonzero_Internal_Padding, 13);
+
 #ifndef CUSTOM_RESULT_DEFINITION
 }}
 #endif

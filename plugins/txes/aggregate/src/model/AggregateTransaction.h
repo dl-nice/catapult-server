@@ -34,10 +34,19 @@ namespace catapult { namespace model {
 	public:
 		DEFINE_TRANSACTION_CONSTANTS(Entity_Type_Aggregate_Complete, 1)
 
+		/// Size of the footer that can be skipped when signing/verifying.
+		static constexpr size_t Footer_Size = 2 * sizeof(uint32_t);
+
 	public:
+		/// Aggregate hash of an aggregate's transactions.
+		Hash256 TransactionsHash;
+
 		/// Transaction payload size in bytes.
 		/// \note This is the total number bytes occupied by all sub-transactions.
 		uint32_t PayloadSize;
+
+		/// Reserved padding to align end of AggregateTransactionHeader on 8-byte boundary.
+		uint32_t AggregateTransactionHeader_Reserved1;
 
 		// followed by sub-transaction data
 		// followed by cosignatures data
@@ -61,25 +70,25 @@ namespace catapult { namespace model {
 		}
 
 	public:
-		/// Returns a const pointer to the first cosignature contained in this transaction.
+		/// Gets a const pointer to the first cosignature contained in this transaction.
 		/// \note The returned pointer is undefined if the aggregate has an invalid size.
 		const Cosignature* CosignaturesPtr() const {
 			return reinterpret_cast<const Cosignature*>(CosignaturesPtrT(*this));
 		}
 
-		/// Returns a pointer to the first cosignature contained in this transaction.
+		/// Gets a pointer to the first cosignature contained in this transaction.
 		/// \note The returned pointer is undefined if the aggregate has an invalid size.
 		Cosignature* CosignaturesPtr() {
 			return reinterpret_cast<Cosignature*>(CosignaturesPtrT(*this));
 		}
 
-		/// Returns the number of cosignatures attached to this transaction.
+		/// Gets the number of cosignatures attached to this transaction.
 		/// \note The returned value is undefined if the aggregate has an invalid size.
 		size_t CosignaturesCount() const {
 			return CosignaturesCountT(*this);
 		}
 
-		/// Returns the number of cosignatures attached to this transaction.
+		/// Gets the number of cosignatures attached to this transaction.
 		/// \note The returned value is undefined if the aggregate has an invalid size.
 		size_t CosignaturesCount() {
 			return CosignaturesCountT(*this);

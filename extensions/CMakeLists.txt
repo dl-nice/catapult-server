@@ -1,11 +1,11 @@
-cmake_minimum_required(VERSION 3.2)
+cmake_minimum_required(VERSION 3.14)
 
 include_directories(.)
 include_directories(${PROJECT_SOURCE_DIR} ${PROJECT_SOURCE_DIR}/src)
 
 function(catapult_define_extension_no_group EXTENSION_NAME)
 	add_subdirectory(src)
-	add_subdirectory(tests)
+	catapult_add_tests_subdirectory(tests)
 
 	catapult_shared_library_target(extension.${EXTENSION_NAME})
 	target_link_libraries(extension.${EXTENSION_NAME} catapult.${EXTENSION_NAME})

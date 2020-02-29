@@ -24,6 +24,7 @@
 #include "WeakEntityInfo.h"
 #include "catapult/utils/ArraySet.h"
 #include "catapult/utils/TimeSpan.h"
+#include "catapult/plugins.h"
 
 namespace catapult {
 	namespace model {
@@ -48,9 +49,9 @@ namespace catapult { namespace model {
 		utils::TimeSpan MaxLifetime;
 	};
 
-	/// A typed transaction plugin.
+	/// Typed transaction plugin.
 	template<typename TTransaction>
-	class TransactionPluginT {
+	class PLUGIN_API_DEPENDENCY TransactionPluginT {
 	public:
 		virtual ~TransactionPluginT() = default;
 
@@ -58,25 +59,25 @@ namespace catapult { namespace model {
 		/// Gets the transaction entity type.
 		virtual EntityType type() const = 0;
 
-		/// Gets transaction dependent attributes.
+		/// Gets the transaction dependent attributes.
 		virtual TransactionAttributes attributes() const = 0;
 
 		/// Calculates the real size of \a transaction.
 		virtual uint64_t calculateRealSize(const TTransaction& transaction) const = 0;
 	};
 
-	/// An embedded transaction plugin.
-	class EmbeddedTransactionPlugin : public TransactionPluginT<EmbeddedTransaction> {
+	/// Embedded transaction plugin.
+	class PLUGIN_API_DEPENDENCY EmbeddedTransactionPlugin : public TransactionPluginT<EmbeddedTransaction> {
 	public:
 		/// Extracts public keys of additional accounts that must approve \a transaction.
-		virtual utils::KeySet additionalRequiredCosigners(const EmbeddedTransaction& transaction) const = 0;
+		virtual utils::KeySet additionalRequiredCosignatories(const EmbeddedTransaction& transaction) const = 0;
 
 		/// Sends all notifications from \a transaction to \a sub.
 		virtual void publish(const EmbeddedTransaction& transaction, NotificationSubscriber& sub) const = 0;
 	};
 
-	/// A transaction plugin.
-	class TransactionPlugin : public TransactionPluginT<Transaction> {
+	/// Transaction plugin.
+	class PLUGIN_API_DEPENDENCY TransactionPlugin : public TransactionPluginT<Transaction> {
 	public:
 		/// Sends all notifications from \a transactionInfo to \a sub.
 		virtual void publish(const WeakEntityInfoT<Transaction>& transactionInfo, NotificationSubscriber& sub) const = 0;
@@ -98,6 +99,6 @@ namespace catapult { namespace model {
 		virtual const EmbeddedTransactionPlugin& embeddedPlugin() const = 0;
 	};
 
-	/// A registry of transaction plugins.
+	/// Registry of transaction plugins.
 	class TransactionRegistry : public TransactionRegistryT<TransactionPlugin> {};
 }}

@@ -24,34 +24,30 @@
 namespace catapult { namespace observers {
 
 	namespace {
-		uint64_t GetPropertyValue(const model::MosaicProperties& properties, size_t index) {
-			return (properties.begin() + index)->Value;
+		model::MosaicFlags Xor(model::MosaicFlags lhs, model::MosaicFlags rhs) {
+			return static_cast<model::MosaicFlags>(utils::to_underlying_type(lhs) ^ utils::to_underlying_type(rhs));
 		}
 
 		model::MosaicProperties MergeProperties(
 				const model::MosaicProperties& currentProperties,
 				const model::MosaicProperties& notificationProperties,
 				NotifyMode mode) {
-			model::MosaicProperties::PropertyValuesContainer propertyValues;
-			for (auto i = 0u; i < model::First_Optional_Property; ++i)
-				propertyValues[i] = GetPropertyValue(currentProperties, i) ^ GetPropertyValue(notificationProperties, i);
-
-			auto durationIndex = model::First_Optional_Property;
-			propertyValues[durationIndex] = NotifyMode::Commit == mode
-					? GetPropertyValue(currentProperties, durationIndex) + GetPropertyValue(notificationProperties, durationIndex)
-					: GetPropertyValue(currentProperties, durationIndex) - GetPropertyValue(notificationProperties, durationIndex);
-
-			return model::MosaicProperties::FromValues(propertyValues);
+			auto flags = Xor(currentProperties.flags(), notificationProperties.flags());
+			auto divisibility = static_cast<uint8_t>(currentProperties.divisibility() ^ notificationProperties.divisibility());
+			auto duration = NotifyMode::Commit == mode
+					? currentProperties.duration() + notificationProperties.duration()
+					: currentProperties.duration() - notificationProperties.duration();
+			return model::MosaicProperties(flags, divisibility, duration);
 		}
 
 		auto ApplyNotification(
-				state::MosaicEntry& currentEntry,
+				state::MosaicEntry& currentMosaicEntry,
 				const model::MosaicDefinitionNotification& notification,
 				NotifyMode mode) {
-			const auto& currentDefinition = currentEntry.definition();
+			const auto& currentDefinition = currentMosaicEntry.definition();
 			auto newProperties = MergeProperties(currentDefinition.properties(), notification.Properties, mode);
 			auto revision = NotifyMode::Commit == mode ? currentDefinition.revision() + 1 : currentDefinition.revision() - 1;
-			auto definition = state::MosaicDefinition(currentDefinition.height(), notification.Signer, revision, newProperties);
+			auto definition = state::MosaicDefinition(currentDefinition.startHeight(), notification.Signer, revision, newProperties);
 			return state::MosaicEntry(notification.MosaicId, definition);
 		}
 	}
@@ -59,22 +55,22 @@ namespace catapult { namespace observers {
 	DEFINE_OBSERVER(MosaicDefinition, model::MosaicDefinitionNotification, [](
 			const model::MosaicDefinitionNotification& notification,
 			const ObserverContext& context) {
-		auto& cache = context.Cache.sub<cache::MosaicCache>();
+		auto& mosaicCache = context.Cache.sub<cache::MosaicCache>();
 
 		// mosaic supply will always be zero when a mosaic definition is observed
-		auto mosaicIter = cache.find(notification.MosaicId);
+		auto mosaicIter = mosaicCache.find(notification.MosaicId);
 		if (mosaicIter.tryGet()) {
 			// copy existing mosaic entry before removing
 			auto mosaicEntry = mosaicIter.get();
-			cache.remove(notification.MosaicId);
+			mosaicCache.remove(notification.MosaicId);
 
 			if (NotifyMode::Rollback == context.Mode && 1 == mosaicEntry.definition().revision())
 				return;
 
-			cache.insert(ApplyNotification(mosaicEntry, notification, context.Mode));
+			mosaicCache.insert(ApplyNotification(mosaicEntry, notification, context.Mode));
 		} else {
 			auto definition = state::MosaicDefinition(context.Height, notification.Signer, 1, notification.Properties);
-			cache.insert(state::MosaicEntry(notification.MosaicId, definition));
+			mosaicCache.insert(state::MosaicEntry(notification.MosaicId, definition));
 		}
 	});
 }}

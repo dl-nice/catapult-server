@@ -19,63 +19,55 @@
 **/
 
 #pragma once
-#include "catapult/types.h"
+#include "NetworkIdentifier.h"
+#include "NodeIdentity.h"
+#include "catapult/utils/TimeSpan.h"
 
 namespace catapult { namespace model {
-
-/// \note The lower 3 bits must be cleared because they are used for different purposes, e.g. resolvers.
-#define NETWORK_IDENTIFIER_LIST \
-	/* A default (zero) identifier that does not identify any known network. */ \
-	ENUM_VALUE(Zero, 0) \
-	\
-	/* Mijin network identifier. */ \
-	ENUM_VALUE(Mijin, 0x60) \
-	\
-	/* Mijin test network identifier. */ \
-	ENUM_VALUE(Mijin_Test, 0x90) \
-	\
-	/* Public main network identifier. */ \
-	ENUM_VALUE(Public, 0x68) \
-	\
-	/* Public test network identifier. */ \
-	ENUM_VALUE(Public_Test, 0x98)
-
-#define ENUM_VALUE(LABEL, VALUE) LABEL = VALUE,
-	/// Possible network identifiers.
-	enum class NetworkIdentifier : uint8_t {
-		NETWORK_IDENTIFIER_LIST
-	};
-#undef ENUM_VALUE
-
-	/// Insertion operator for outputting \a value to \a out.
-	std::ostream& operator<<(std::ostream& out, NetworkIdentifier value);
 
 	/// Information about a network.
 	struct NetworkInfo {
 	public:
 		/// Creates a default, uninitialized network info.
-		constexpr NetworkInfo() : NetworkInfo(NetworkIdentifier::Zero, {}, {})
+		constexpr NetworkInfo()
+				: NetworkInfo(
+						NetworkIdentifier::Zero,
+						NodeIdentityEqualityStrategy::Key,
+						Key(),
+						catapult::GenerationHash(),
+						utils::TimeSpan())
 		{}
 
-		/// Creates a network info around a network \a identifier, a nemesis public key (\a publicKey)
-		/// and a nemesis generation hash (\a generationHash).
-		constexpr NetworkInfo(NetworkIdentifier identifier, const Key& publicKey, const catapult::GenerationHash& generationHash)
+		/// Creates a network info around network \a identifier, node equality strategy (\a nodeEqualityStrategy),
+		/// nemesis public key (\a publicKey), nemesis generation hash (\a generationHash)
+		/// and nemesis epoch time adjustment (\a epochAdjustment).
+		constexpr NetworkInfo(
+				NetworkIdentifier identifier,
+				NodeIdentityEqualityStrategy nodeEqualityStrategy,
+				const Key& publicKey,
+				const catapult::GenerationHash& generationHash,
+				const utils::TimeSpan& epochAdjustment)
 				: Identifier(identifier)
+				, NodeEqualityStrategy(nodeEqualityStrategy)
 				, PublicKey(publicKey)
 				, GenerationHash(generationHash)
+				, EpochAdjustment(epochAdjustment)
 		{}
 
 	public:
 		/// Network identifier.
 		NetworkIdentifier Identifier;
 
+		/// Node equality strategy.
+		NodeIdentityEqualityStrategy NodeEqualityStrategy;
+
 		/// Nemesis public key.
 		Key PublicKey;
 
 		/// Nemesis generation hash.
 		catapult::GenerationHash GenerationHash;
-	};
 
-	/// Tries to parse \a networkName into a network identifier (\a networkIdentifier).
-	bool TryParseValue(const std::string& networkName, NetworkIdentifier& networkIdentifier);
+		/// Nemesis epoch time adjustment.
+		utils::TimeSpan EpochAdjustment;
+	};
 }}

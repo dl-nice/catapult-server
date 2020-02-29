@@ -52,17 +52,17 @@ namespace catapult { namespace state {
 		public:
 			auto createEntry(size_t mainAccountId, size_t numCosignatories, size_t numMultisigAccounts) {
 				MultisigEntry entry(m_accountKeys[mainAccountId]);
-				entry.setMinApproval(static_cast<uint8_t>(mainAccountId + 23));
-				entry.setMinRemoval(static_cast<uint8_t>(mainAccountId + 34));
+				entry.setMinApproval(0x80000000 | static_cast<uint32_t>(mainAccountId + 23));
+				entry.setMinRemoval(0x00010000 | static_cast<uint32_t>(mainAccountId + 34));
 
 				// add cosignatories
 				for (auto i = mainAccountId; i < mainAccountId + numCosignatories; ++i)
-					entry.cosignatories().insert(m_accountKeys[i]);
+					entry.cosignatoryPublicKeys().insert(m_accountKeys[i]);
 
 				// add multisig accounts
 				auto firstMultisigId = mainAccountId + numCosignatories;
 				for (auto i = firstMultisigId; i < firstMultisigId + numMultisigAccounts; ++i)
-					entry.multisigAccounts().insert(m_accountKeys[i]);
+					entry.multisigPublicKeys().insert(m_accountKeys[i]);
 
 				return entry;
 			}
@@ -84,7 +84,9 @@ namespace catapult { namespace state {
 		}
 
 		void AssertAccountKeys(const utils::SortedKeySet& expectedKeys, const uint8_t* pData) {
-			ASSERT_EQ(expectedKeys.size(), *reinterpret_cast<const uint64_t*>(pData));
+			// pData is not 8-byte aligned, so need to use memcpy
+			uint64_t numKeys;
+			std::memcpy(&numKeys, pData, sizeof(uint64_t));
 			pData += sizeof(uint64_t);
 
 			std::set<Key> keys;
@@ -101,19 +103,19 @@ namespace catapult { namespace state {
 
 		void AssertEntryBuffer(const MultisigEntry& entry, const uint8_t* pData, size_t expectedSize) {
 			const auto* pExpectedEnd = pData + expectedSize;
-			EXPECT_EQ(entry.minApproval(), pData[0]);
-			EXPECT_EQ(entry.minRemoval(), pData[1]);
-			pData += 2;
+			EXPECT_EQ(entry.minApproval(), reinterpret_cast<const uint32_t&>(pData[0]));
+			EXPECT_EQ(entry.minRemoval(), reinterpret_cast<const uint32_t&>(pData[sizeof(uint32_t)]));
+			pData += 2 * sizeof(uint32_t);
 
 			auto accountKey = ExtractKey(pData);
 			EXPECT_EQ(entry.key(), accountKey);
 			pData += Key::Size;
 
-			AssertAccountKeys(entry.cosignatories(), pData);
-			pData += sizeof(uint64_t) + entry.cosignatories().size() * Key::Size;
+			AssertAccountKeys(entry.cosignatoryPublicKeys(), pData);
+			pData += sizeof(uint64_t) + entry.cosignatoryPublicKeys().size() * Key::Size;
 
-			AssertAccountKeys(entry.multisigAccounts(), pData);
-			pData += sizeof(uint64_t) + entry.multisigAccounts().size() * Key::Size;
+			AssertAccountKeys(entry.multisigPublicKeys(), pData);
+			pData += sizeof(uint64_t) + entry.multisigPublicKeys().size() * Key::Size;
 
 			EXPECT_EQ(pExpectedEnd, pData);
 		}
@@ -123,7 +125,7 @@ namespace catapult { namespace state {
 
 	// region Save
 
-	TEST(TEST_CLASS, CanSaveSingleEntryWithNeitherCosignersNorMultisigAccounts) {
+	TEST(TEST_CLASS, CanSaveSingleEntryWithNeitherCosignatoriesNorMultisigAccounts) {
 		// Arrange:
 		TestContext context;
 		auto entry = context.createEntry(0, 0, 0);
@@ -132,12 +134,12 @@ namespace catapult { namespace state {
 		MultisigEntrySerializer::Save(entry, context.outputStream());
 
 		// Assert:
-		auto expectedSize = sizeof(uint8_t) * 2 + sizeof(Key) + 2 * sizeof(uint64_t);
+		auto expectedSize = sizeof(uint32_t) * 2 + sizeof(Key) + 2 * sizeof(uint64_t);
 		ASSERT_EQ(expectedSize, context.buffer().size());
 		AssertEntryBuffer(entry, context.buffer().data(), expectedSize);
 	}
 
-	TEST(TEST_CLASS, CanSaveSingleEntryWithBothCosignersAndMultisigAccounts) {
+	TEST(TEST_CLASS, CanSaveSingleEntryWithBothCosignatoriesAndMultisigAccounts) {
 		// Arrange:
 		TestContext context;
 		auto entry = context.createEntry(0, 3, 4);
@@ -146,7 +148,7 @@ namespace catapult { namespace state {
 		MultisigEntrySerializer::Save(entry, context.outputStream());
 
 		// Assert:
-		auto expectedSize = sizeof(uint8_t) * 2 + sizeof(Key) + 2 * sizeof(uint64_t) + 3 * sizeof(Key) + 4 * sizeof(Key);
+		auto expectedSize = sizeof(uint32_t) * 2 + sizeof(Key) + 2 * sizeof(uint64_t) + 3 * sizeof(Key) + 4 * sizeof(Key);
 		ASSERT_EQ(expectedSize, context.buffer().size());
 		AssertEntryBuffer(entry, context.buffer().data(), expectedSize);
 	}
@@ -170,11 +172,11 @@ namespace catapult { namespace state {
 		public:
 			static void AddKeys(MultisigEntry& entry, const std::vector<Key>& keys) {
 				for (const auto& key : keys)
-					entry.cosignatories().insert(key);
+					entry.cosignatoryPublicKeys().insert(key);
 			}
 
 			static constexpr size_t GetKeyStartBufferOffset() {
-				return 2u * sizeof(uint8_t) + Key::Size;
+				return 2u * sizeof(uint32_t) + Key::Size;
 			}
 		};
 
@@ -182,11 +184,11 @@ namespace catapult { namespace state {
 		public:
 			static void AddKeys(MultisigEntry& entry, const std::vector<Key>& keys) {
 				for (const auto& key : keys)
-					entry.multisigAccounts().insert(key);
+					entry.multisigPublicKeys().insert(key);
 			}
 
 			static constexpr size_t GetKeyStartBufferOffset() {
-				return 2u * sizeof(uint8_t) + Key::Size + sizeof(uint64_t);
+				return 2u * sizeof(uint32_t) + Key::Size + sizeof(uint64_t);
 			}
 		};
 	}

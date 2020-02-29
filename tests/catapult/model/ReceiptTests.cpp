@@ -19,6 +19,7 @@
 **/
 
 #include "catapult/model/Receipt.h"
+#include "tests/test/nodeps/Alignment.h"
 #include "tests/TestHarness.h"
 
 namespace catapult { namespace model {
@@ -27,35 +28,55 @@ namespace catapult { namespace model {
 
 	// region Receipt
 
+#define RECEIPT_FIELDS FIELD(Version) FIELD(Type)
+
 	TEST(TEST_CLASS, ReceiptHasExpectedSize) {
 		// Arrange:
-		auto expectedSize =
-				sizeof(uint32_t) // size
-				+ sizeof(uint16_t) // version
-				+ sizeof(uint16_t); // type
+		auto expectedSize = sizeof(SizePrefixedEntity);
+
+#define FIELD(X) expectedSize += sizeof(Receipt::X);
+		RECEIPT_FIELDS
+#undef FIELD
 
 		// Assert:
 		EXPECT_EQ(expectedSize, sizeof(Receipt));
-		EXPECT_EQ(8u, sizeof(Receipt));
+		EXPECT_EQ(4u + 4, sizeof(Receipt));
 	}
+
+	TEST(TEST_CLASS, ReceiptHasProperAlignment) {
+#define FIELD(X) EXPECT_ALIGNED(Receipt, X);
+		RECEIPT_FIELDS
+#undef FIELD
+	}
+
+#undef RECEIPT_FIELDS
 
 	// endregion
 
 	// region BalanceTransferReceipt
 
+#define RECEIPT_FIELDS FIELD(Mosaic) FIELD(SenderPublicKey) FIELD(RecipientAddress)
+
 	TEST(TEST_CLASS, BalanceTransferReceiptHasExpectedSize) {
 		// Arrange:
-		auto expectedSize =
-				sizeof(Receipt) // base
-				+ Key::Size // sender
-				+ Address::Size // receipient
-				+ sizeof(MosaicId) // mosaic id
-				+ sizeof(Amount); // amount
+		auto expectedSize = sizeof(Receipt);
+
+#define FIELD(X) expectedSize += sizeof(BalanceTransferReceipt::X);
+		RECEIPT_FIELDS
+#undef FIELD
 
 		// Assert:
 		EXPECT_EQ(expectedSize, sizeof(BalanceTransferReceipt));
 		EXPECT_EQ(8u + 73, sizeof(BalanceTransferReceipt));
 	}
+
+	TEST(TEST_CLASS, BalanceTransferReceiptHasProperAlignment) {
+#define FIELD(X) EXPECT_ALIGNED(BalanceTransferReceipt, X);
+		RECEIPT_FIELDS
+#undef FIELD
+	}
+
+#undef RECEIPT_FIELDS
 
 	TEST(TEST_CLASS, CanCreateBalanceTransferReceipt) {
 		// Arrange:
@@ -69,60 +90,81 @@ namespace catapult { namespace model {
 		ASSERT_EQ(sizeof(BalanceTransferReceipt), receipt.Size);
 		EXPECT_EQ(1u, receipt.Version);
 		EXPECT_EQ(static_cast<ReceiptType>(123), receipt.Type);
-		EXPECT_EQ(sender, receipt.Sender);
-		EXPECT_EQ(recipient, receipt.Recipient);
-		EXPECT_EQ(MosaicId(88), receipt.MosaicId);
-		EXPECT_EQ(Amount(452), receipt.Amount);
+		EXPECT_EQ(MosaicId(88), receipt.Mosaic.MosaicId);
+		EXPECT_EQ(Amount(452), receipt.Mosaic.Amount);
+		EXPECT_EQ(sender, receipt.SenderPublicKey);
+		EXPECT_EQ(recipient, receipt.RecipientAddress);
 	}
 
 	// endregion
 
 	// region BalanceChangeReceipt
 
+#define RECEIPT_FIELDS FIELD(Mosaic) FIELD(TargetPublicKey)
+
 	TEST(TEST_CLASS, BalanceChangeReceiptHasExpectedSize) {
 		// Arrange:
-		auto expectedSize =
-				sizeof(Receipt) // base
-				+ Key::Size // account
-				+ sizeof(MosaicId) // mosaic id
-				+ sizeof(Amount); // amount
+		auto expectedSize = sizeof(Receipt);
+
+#define FIELD(X) expectedSize += sizeof(BalanceChangeReceipt::X);
+		RECEIPT_FIELDS
+#undef FIELD
 
 		// Assert:
 		EXPECT_EQ(expectedSize, sizeof(BalanceChangeReceipt));
 		EXPECT_EQ(8u + 48, sizeof(BalanceChangeReceipt));
 	}
 
+	TEST(TEST_CLASS, BalanceChangeReceiptHasProperAlignment) {
+#define FIELD(X) EXPECT_ALIGNED(BalanceChangeReceipt, X);
+		RECEIPT_FIELDS
+#undef FIELD
+	}
+
+#undef RECEIPT_FIELDS
+
 	TEST(TEST_CLASS, CanCreateBalanceChangeReceipt) {
 		// Arrange:
-		auto account = test::GenerateRandomByteArray<Key>();
+		auto target = test::GenerateRandomByteArray<Key>();
 
 		// Act:
-		BalanceChangeReceipt receipt(static_cast<ReceiptType>(124), account, MosaicId(88), Amount(452));
+		BalanceChangeReceipt receipt(static_cast<ReceiptType>(124), target, MosaicId(88), Amount(452));
 
 		// Assert:
 		ASSERT_EQ(sizeof(BalanceChangeReceipt), receipt.Size);
 		EXPECT_EQ(1u, receipt.Version);
 		EXPECT_EQ(static_cast<ReceiptType>(124), receipt.Type);
-		EXPECT_EQ(account, receipt.Account);
-		EXPECT_EQ(MosaicId(88), receipt.MosaicId);
-		EXPECT_EQ(Amount(452), receipt.Amount);
+		EXPECT_EQ(MosaicId(88), receipt.Mosaic.MosaicId);
+		EXPECT_EQ(Amount(452), receipt.Mosaic.Amount);
+		EXPECT_EQ(target, receipt.TargetPublicKey);
 	}
 
 	// endregion
 
 	// region InflationReceipt
 
+#define RECEIPT_FIELDS FIELD(Mosaic)
+
 	TEST(TEST_CLASS, InflationReceiptHasExpectedSize) {
 		// Arrange:
-		auto expectedSize =
-				sizeof(Receipt) // base
-				+ sizeof(MosaicId) // mosaic id
-				+ sizeof(Amount); // amount
+		auto expectedSize = sizeof(Receipt);
+
+#define FIELD(X) expectedSize += sizeof(InflationReceipt::X);
+		RECEIPT_FIELDS
+#undef FIELD
 
 		// Assert:
 		EXPECT_EQ(expectedSize, sizeof(InflationReceipt));
 		EXPECT_EQ(8u + 16, sizeof(InflationReceipt));
 	}
+
+	TEST(TEST_CLASS, InflationReceiptHasProperAlignment) {
+#define FIELD(X) EXPECT_ALIGNED(InflationReceipt, X);
+		RECEIPT_FIELDS
+#undef FIELD
+	}
+
+#undef RECEIPT_FIELDS
 
 	TEST(TEST_CLASS, CanCreateInflationReceipt) {
 		// Act:
@@ -132,24 +174,36 @@ namespace catapult { namespace model {
 		ASSERT_EQ(sizeof(InflationReceipt), receipt.Size);
 		EXPECT_EQ(1u, receipt.Version);
 		EXPECT_EQ(static_cast<ReceiptType>(124), receipt.Type);
-		EXPECT_EQ(MosaicId(88), receipt.MosaicId);
-		EXPECT_EQ(Amount(452), receipt.Amount);
+		EXPECT_EQ(MosaicId(88), receipt.Mosaic.MosaicId);
+		EXPECT_EQ(Amount(452), receipt.Mosaic.Amount);
 	}
 
 	// endregion
 
 	// region ArtifactExpiryReceipt
 
+#define RECEIPT_FIELDS FIELD(ArtifactId)
+
 	TEST(TEST_CLASS, ArtifactExpiryReceiptHasExpectedSize) {
 		// Arrange:
-		auto expectedSize =
-				sizeof(Receipt) // base
-				+ sizeof(uint64_t); // id
+		auto expectedSize = sizeof(Receipt);
+
+#define FIELD(X) expectedSize += sizeof(ArtifactExpiryReceipt<uint64_t>::X);
+		RECEIPT_FIELDS
+#undef FIELD
 
 		// Assert:
 		EXPECT_EQ(expectedSize, sizeof(ArtifactExpiryReceipt<uint64_t>));
 		EXPECT_EQ(8u + 8, sizeof(ArtifactExpiryReceipt<uint64_t>));
 	}
+
+	TEST(TEST_CLASS, ArtifactExpiryReceiptHasProperAlignment) {
+#define FIELD(X) EXPECT_ALIGNED(ArtifactExpiryReceipt<uint64_t>, X);
+		RECEIPT_FIELDS
+#undef FIELD
+	}
+
+#undef RECEIPT_FIELDS
 
 	TEST(TEST_CLASS, CanCreateArtifactExpiryReceipt) {
 		// Act:

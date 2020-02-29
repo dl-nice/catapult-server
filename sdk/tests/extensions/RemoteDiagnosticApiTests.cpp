@@ -195,6 +195,60 @@ namespace catapult { namespace extensions {
 
 		// endregion
 
+		// region UnlockedAccountsTraits
+
+		struct UnlockedAccountsTraits {
+			static constexpr auto Packet_Type = ionet::PacketType::Unlocked_Accounts;
+			static constexpr auto Num_Unlocked_Accounts = 3u;
+
+			static auto Invoke(const RemoteDiagnosticApi& api) {
+				return api.unlockedAccounts();
+			}
+
+			static auto CreateValidResponsePacket() {
+				uint32_t payloadSize = Num_Unlocked_Accounts * sizeof(Key);
+				auto pResponsePacket = ionet::CreateSharedPacket<ionet::Packet>(payloadSize);
+				pResponsePacket->Type = Packet_Type;
+
+				auto* pKeys = reinterpret_cast<Key*>(pResponsePacket->Data());
+				pKeys[0] = { { 0x11 } };
+				pKeys[1] = { { 0x22 } };
+				pKeys[2] = { { 0x33 } };
+
+				return pResponsePacket;
+			}
+
+			static auto CreateMalformedResponsePacket() {
+				// just change the size because no responses are intrinsically invalid
+				auto pResponsePacket = CreateValidResponsePacket();
+				--pResponsePacket->Size;
+				return pResponsePacket;
+			}
+
+			static void ValidateRequest(const ionet::Packet& packet) {
+				EXPECT_TRUE(ionet::IsPacketValid(packet, Packet_Type));
+			}
+
+			static void ValidateResponse(const ionet::Packet&, const model::EntityRange<Key>& unlockedAccountKeys) {
+				ASSERT_EQ(static_cast<uint32_t>(Num_Unlocked_Accounts), unlockedAccountKeys.size());
+
+				auto iter = unlockedAccountKeys.cbegin();
+				AssertKey(0x11, *iter);
+
+				++iter;
+				AssertKey(0x22, *iter);
+
+				++iter;
+				AssertKey(0x33, *iter);
+			}
+
+			static void AssertKey(uint8_t expectedByte, const Key& key) {
+				EXPECT_EQ(Key{ { expectedByte } }, key);
+			}
+		};
+
+		// endregion
+
 		template<typename TIdentifier, ionet::PacketType PacketType>
 		struct InfosTraits {
 		public:
@@ -230,20 +284,25 @@ namespace catapult { namespace extensions {
 			static void ValidateResponse(const ionet::Packet& response, const model::EntityRange<EntityType>& infos) {
 				ASSERT_EQ(3u, infos.size());
 
-				auto pData = response.Data();
+				const auto* pExpectedData = response.Data();
 				auto iter = infos.cbegin();
-				for (auto i = 0u; i < infos.size(); ++i) {
+				for (auto i = 0u; i < infos.size(); ++i, ++iter) {
 					std::string message = "comparing info at " + std::to_string(i);
-					const auto& expectedInfo = reinterpret_cast<const EntityType&>(*pData);
 					const auto& actualInfo = *iter;
+
+					// `response` is the (unprocessed) response Packet, which contains unaligned data
+					// `infos` is the (processed) result, which is aligned
+					std::vector<uint8_t> expectedInfoBuffer(actualInfo.Size);
+					std::memcpy(&expectedInfoBuffer[0], pExpectedData, actualInfo.Size);
+					const auto& expectedInfo = reinterpret_cast<const EntityType&>(expectedInfoBuffer[0]);
+
 					ASSERT_EQ(expectedInfo.Size, actualInfo.Size) << message;
 					ASSERT_EQ(expectedInfo.DataSize, actualInfo.DataSize) << message;
 
 					EXPECT_EQ(expectedInfo.Id, actualInfo.Id) << message;
 					EXPECT_EQ_MEMORY(expectedInfo.DataPtr(), actualInfo.DataPtr(), actualInfo.DataSize) << message;
 
-					++iter;
-					pData += expectedInfo.Size;
+					pExpectedData += expectedInfo.Size;
 				}
 			}
 
@@ -375,6 +434,7 @@ namespace catapult { namespace extensions {
 
 	DEFINE_REMOTE_API_TESTS_EMPTY_RESPONSE_INVALID(RemoteDiagnosticApi, DiagnosticCounters)
 	DEFINE_REMOTE_API_TESTS_EMPTY_RESPONSE_INVALID(RemoteDiagnosticApi, ActiveNodeInfos)
+	DEFINE_REMOTE_API_TESTS_EMPTY_RESPONSE_INVALID(RemoteDiagnosticApi, UnlockedAccounts)
 
 	using DiagnosticAccountInfosTraits = DiagnosticApiTraits<AccountInfosTraits>;
 	using DiagnosticAccountRestrictionsInfosTraits = DiagnosticApiTraits<AccountRestrictionsInfosTraits>;

@@ -41,10 +41,11 @@ namespace catapult { namespace test {
 
 		template<typename TEntity>
 		void AssertEqualEntityData(const TEntity& entity, const bsoncxx::document::view& dbEntity) {
-			EXPECT_EQ(entity.Signer, GetKeyValue(dbEntity, "signer"));
+			EXPECT_EQ(entity.SignerPublicKey, GetKeyValue(dbEntity, "signerPublicKey"));
 
 			EXPECT_EQ(entity.Version, GetInt32(dbEntity, "version"));
-			EXPECT_EQ(utils::to_underlying_type(entity.Type), GetInt32(dbEntity, "type"));
+			EXPECT_EQ(entity.Network, static_cast<model::NetworkIdentifier>(GetInt32(dbEntity, "network")));
+			EXPECT_EQ(entity.Type, static_cast<model::EntityType>(GetInt32(dbEntity, "type")));
 		}
 
 		void AssertEqualHashArray(const std::vector<Hash256>& hashes, const bsoncxx::document::view& dbHashes) {
@@ -94,8 +95,8 @@ namespace catapult { namespace test {
 	}
 
 	void AssertEqualBlockData(const model::Block& block, const bsoncxx::document::view& dbBlock) {
-		// - 4 fields from VerifiableEntity, 9 fields from Block
-		EXPECT_EQ(13u, GetFieldCount(dbBlock));
+		// - 5 fields from VerifiableEntity, 9 fields from Block
+		EXPECT_EQ(14u, GetFieldCount(dbBlock));
 		AssertEqualVerifiableEntityData(block, dbBlock);
 
 		EXPECT_EQ(block.Height, Height(GetUint64(dbBlock, "height")));
@@ -103,10 +104,10 @@ namespace catapult { namespace test {
 		EXPECT_EQ(block.Difficulty, Difficulty(GetUint64(dbBlock, "difficulty")));
 		EXPECT_EQ(block.FeeMultiplier, BlockFeeMultiplier(GetUint32(dbBlock, "feeMultiplier")));
 		EXPECT_EQ(block.PreviousBlockHash, GetHashValue(dbBlock, "previousBlockHash"));
-		EXPECT_EQ(block.BlockTransactionsHash, GetHashValue(dbBlock, "blockTransactionsHash"));
-		EXPECT_EQ(block.BlockReceiptsHash, GetHashValue(dbBlock, "blockReceiptsHash"));
+		EXPECT_EQ(block.TransactionsHash, GetHashValue(dbBlock, "transactionsHash"));
+		EXPECT_EQ(block.ReceiptsHash, GetHashValue(dbBlock, "receiptsHash"));
 		EXPECT_EQ(block.StateHash, GetHashValue(dbBlock, "stateHash"));
-		EXPECT_EQ(block.Beneficiary, GetKeyValue(dbBlock, "beneficiary"));
+		EXPECT_EQ(block.BeneficiaryPublicKey, GetKeyValue(dbBlock, "beneficiaryPublicKey"));
 	}
 
 	void AssertEqualBlockMetadata(
@@ -124,7 +125,7 @@ namespace catapult { namespace test {
 		EXPECT_EQ(totalFee, Amount(GetUint64(dbBlockMetadata, "totalFee")));
 		EXPECT_EQ(numTransactions, GetInt32(dbBlockMetadata, "numTransactions"));
 
-		AssertEqualHashArray(blockElement.SubCacheMerkleRoots, dbBlockMetadata["subCacheMerkleRoots"].get_array().value);
+		AssertEqualHashArray(blockElement.SubCacheMerkleRoots, dbBlockMetadata["stateHashSubCacheMerkleRoots"].get_array().value);
 		AssertEqualHashArray(transactionMerkleTree, dbBlockMetadata["transactionMerkleTree"].get_array().value);
 		if (!statementMerkleTree.empty()) {
 			EXPECT_EQ(numStatements, GetInt32(dbBlockMetadata, "numStatements"));
@@ -200,17 +201,15 @@ namespace catapult { namespace test {
 
 	void AssertEqualMockTransactionData(const mocks::MockTransaction& transaction, const bsoncxx::document::view& dbTransaction) {
 		AssertEqualTransactionData(transaction, dbTransaction);
-		EXPECT_EQ(transaction.Recipient, GetKeyValue(dbTransaction, "recipient"));
-		EXPECT_EQ(
-				ToHexString(transaction.DataPtr(), transaction.Data.Size),
-				ToHexString(GetBinary(dbTransaction, "data"), transaction.Data.Size));
+		EXPECT_EQ(transaction.RecipientPublicKey, GetKeyValue(dbTransaction, "recipientPublicKey"));
+		EXPECT_EQ_MEMORY(transaction.DataPtr(), GetBinary(dbTransaction, "data"), transaction.Data.Size);
 	}
 
 	void AssertEqualCosignatures(const std::vector<model::Cosignature>& expectedCosignatures, const bsoncxx::array::view& dbCosignatures) {
 		auto iter = dbCosignatures.cbegin();
 		for (const auto& expectedCosignature : expectedCosignatures) {
 			auto cosignatureView = iter->get_document().view();
-			EXPECT_EQ(expectedCosignature.Signer, GetKeyValue(cosignatureView, "signer"));
+			EXPECT_EQ(expectedCosignature.SignerPublicKey, GetKeyValue(cosignatureView, "signerPublicKey"));
 			EXPECT_EQ(expectedCosignature.Signature, GetSignatureValue(cosignatureView, "signature"));
 			++iter;
 		}

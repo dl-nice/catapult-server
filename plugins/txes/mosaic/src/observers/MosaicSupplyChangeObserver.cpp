@@ -27,29 +27,29 @@ namespace catapult { namespace observers {
 	using Notification = model::MosaicSupplyChangeNotification;
 
 	namespace {
-		constexpr bool ShouldIncrease(NotifyMode mode, model::MosaicSupplyChangeDirection direction) {
+		constexpr bool ShouldIncrease(NotifyMode mode, model::MosaicSupplyChangeAction action) {
 			return
-					(NotifyMode::Commit == mode && model::MosaicSupplyChangeDirection::Increase == direction) ||
-					(NotifyMode::Rollback == mode && model::MosaicSupplyChangeDirection::Decrease == direction);
+					(NotifyMode::Commit == mode && model::MosaicSupplyChangeAction::Increase == action) ||
+					(NotifyMode::Rollback == mode && model::MosaicSupplyChangeAction::Decrease == action);
 		}
 	}
 
 	DEFINE_OBSERVER(MosaicSupplyChange, Notification, [](const Notification& notification, const ObserverContext& context) {
 		auto mosaicId = context.Resolvers.resolve(notification.MosaicId);
 		auto& accountStateCache = context.Cache.sub<cache::AccountStateCache>();
-		auto& cache = context.Cache.sub<cache::MosaicCache>();
+		auto& mosaicCache = context.Cache.sub<cache::MosaicCache>();
 
 		auto accountStateIter = accountStateCache.find(notification.Signer);
 		auto& accountState = accountStateIter.get();
 
-		auto mosaicIter = cache.find(mosaicId);
-		auto& entry = mosaicIter.get();
-		if (ShouldIncrease(context.Mode, notification.Direction)) {
+		auto mosaicIter = mosaicCache.find(mosaicId);
+		auto& mosaicEntry = mosaicIter.get();
+		if (ShouldIncrease(context.Mode, notification.Action)) {
 			accountState.Balances.credit(mosaicId, notification.Delta);
-			entry.increaseSupply(notification.Delta);
+			mosaicEntry.increaseSupply(notification.Delta);
 		} else {
 			accountState.Balances.debit(mosaicId, notification.Delta);
-			entry.decreaseSupply(notification.Delta);
+			mosaicEntry.decreaseSupply(notification.Delta);
 		}
 	});
 }}

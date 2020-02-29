@@ -32,10 +32,13 @@ namespace catapult { namespace plugins {
 	namespace {
 		template<typename TTransaction>
 		void Publish(const TTransaction& transaction, NotificationSubscriber& sub) {
-			sub.notify(NamespaceRequiredNotification(transaction.Signer, transaction.NamespaceId));
+			sub.notify(NamespaceRequiredNotification(transaction.SignerPublicKey, transaction.NamespaceId));
 			sub.notify(AliasLinkNotification(transaction.NamespaceId, transaction.AliasAction));
 			sub.notify(AliasedMosaicIdNotification(transaction.NamespaceId, transaction.AliasAction, transaction.MosaicId));
-			sub.notify(MosaicRequiredNotification(transaction.Signer, transaction.MosaicId));
+
+			// in case of unlink, the existence of the (possibly expired) mosaic is guaranteed
+			if (model::AliasAction::Link == transaction.AliasAction)
+				sub.notify(MosaicRequiredNotification(transaction.SignerPublicKey, transaction.MosaicId));
 		}
 	}
 

@@ -94,6 +94,10 @@ namespace catapult { namespace consumers {
 				uint32_t numBlocks,
 				uint32_t numTransactionsPerBlock) {
 			uint32_t numBytesPerBlock = sizeof(model::BlockHeader) + numTransactionsPerBlock * Transaction_Size;
+			auto txPaddingSize = utils::GetPaddingSize(Transaction_Size, 8);
+			if (0 < numTransactionsPerBlock)
+				numBytesPerBlock += (numTransactionsPerBlock - 1) * txPaddingSize;
+
 			std::vector<uint8_t> buffer(numBlocks * numBytesPerBlock);
 			test::FillWithRandomData(buffer);
 
@@ -105,7 +109,8 @@ namespace catapult { namespace consumers {
 				block.Type = model::Entity_Type_Block;
 
 				for (auto j = 0u; j < numTransactionsPerBlock; ++j) {
-					auto txOffset = offsets.back() + sizeof(model::BlockHeader) + j * Transaction_Size;
+					auto txOffset = offsets.back() + sizeof(model::BlockHeader);
+					txOffset += j * (Transaction_Size + txPaddingSize);
 					WriteTransactionAt(buffer, txOffset);
 				}
 
@@ -198,7 +203,7 @@ namespace catapult { namespace consumers {
 		// Assert:
 		test::AssertContinued(result);
 		ASSERT_EQ(1u, blockElements.size());
-		EXPECT_EQ(test::Deterministic_Block_Hash_String, test::ToString(blockElements[0].EntityHash));
+		EXPECT_EQ(utils::ParseByteArray<Hash256>(test::Deterministic_Block_Hash_String), blockElements[0].EntityHash);
 	}
 
 	TEST(BLOCK_TEST_CLASS, ExceptionIsPropagatedWhenMalformedTransactionIsProcessed) {
@@ -207,8 +212,7 @@ namespace catapult { namespace consumers {
 		auto input = CreateBlockConsumerInput(3, 4);
 		auto& blockElements = input.blocks();
 
-		const auto* pTransaction = static_cast<const mocks::MockTransaction*>(blockElements[1].Block.TransactionsPtr()) + 2;
-		const_cast<mocks::MockTransaction*>(pTransaction)->Size = 2 * sizeof(mocks::MockTransaction) + 1;
+		(++++const_cast<model::Block&>(blockElements[1].Block).Transactions().begin())->Size *= 2;
 
 		// Act + Assert: transaction iteration throws an exception
 		EXPECT_THROW(CreateBlockHashCalculatorConsumer(GetNetworkGenerationHash(), registry)(blockElements), catapult_runtime_error);
@@ -227,13 +231,13 @@ namespace catapult { namespace consumers {
 			auto registry = mocks::CreateDefaultTransactionRegistry();
 			auto input = CreateBlockConsumerInput(numBlocks, numTransactionsPerBlock);
 			auto& blockElements = input.blocks();
-			const_cast<model::Block&>(blockElements[mismatchedIndex].Block).BlockTransactionsHash[0] ^= 0xFF;
+			const_cast<model::Block&>(blockElements[mismatchedIndex].Block).TransactionsHash[0] ^= 0xFF;
 
 			// Act:
 			auto result = CreateBlockHashCalculatorConsumer(GetNetworkGenerationHash(), registry)(blockElements);
 
 			// Assert: the elements were skipped because a block transactions hash didn't match
-			test::AssertAborted(result, Failure_Consumer_Block_Transactions_Hash_Mismatch);
+			test::AssertAborted(result, Failure_Consumer_Block_Transactions_Hash_Mismatch, disruptor::ConsumerResultSeverity::Failure);
 		}
 	}
 
@@ -312,7 +316,7 @@ namespace catapult { namespace consumers {
 		// Assert:
 		test::AssertContinued(result);
 		ASSERT_EQ(1u, transactionElements.size());
-		EXPECT_EQ(test::Deterministic_Transaction_Hash_String, test::ToString(transactionElements[0].EntityHash));
+		EXPECT_EQ(utils::ParseByteArray<Hash256>(test::Deterministic_Transaction_Hash_String), transactionElements[0].EntityHash);
 	}
 
 	// endregion
@@ -326,8 +330,8 @@ namespace catapult { namespace consumers {
 				}
 
 				static void UpdateWithExpectedMerkleHash(ConsumerInput& input, const Hash256& merkleHash) {
-					// set BlockTransactionsHash so that the consumer completes successfully
-					const_cast<Hash256&>(input.blocks()[0].Block.BlockTransactionsHash) = merkleHash;
+					// set TransactionsHash so that the consumer completes successfully
+					const_cast<Hash256&>(input.blocks()[0].Block.TransactionsHash) = merkleHash;
 				}
 
 				static auto Consume(const model::TransactionRegistry& registry, ConsumerInput& input) {

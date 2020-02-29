@@ -22,7 +22,9 @@
 #include "sdk/src/extensions/BlockExtensions.h"
 #include "catapult/crypto/Hashes.h"
 #include "catapult/crypto/MerkleHashBuilder.h"
+#include "catapult/utils/HexParser.h"
 #include "tests/test/core/BlockTestUtils.h"
+#include "tests/test/nodeps/KeyTestUtils.h"
 #include "tests/TestHarness.h"
 
 namespace catapult { namespace model {
@@ -130,11 +132,11 @@ namespace catapult { namespace model {
 	TEST(TEST_CLASS, CanCalculateBlockTransactionsHash_Deterministic) {
 		// Arrange:
 		auto seedHashes = {
-			test::ToArray<Hash256::Size>("36C8213162CDBC78767CF43D4E06DDBE0D3367B6CEAEAEB577A50E2052441BC8"),
-			test::ToArray<Hash256::Size>("8A316E48F35CDADD3F827663F7535E840289A16A43E7134B053A86773E474C28"),
-			test::ToArray<Hash256::Size>("6D80E71F00DFB73B358B772AD453AEB652AE347D3E098AE269005A88DA0B84A7"),
-			test::ToArray<Hash256::Size>("2AE2CA59B5BB29721BFB79FE113929B6E52891CAA29CBF562EBEDC46903FF681"),
-			test::ToArray<Hash256::Size>("421D6B68A6DF8BB1D5C9ACF7ED44515E77945D42A491BECE68DA009B551EE6CE")
+			utils::ParseByteArray<Hash256>("36C8213162CDBC78767CF43D4E06DDBE0D3367B6CEAEAEB577A50E2052441BC8"),
+			utils::ParseByteArray<Hash256>("8A316E48F35CDADD3F827663F7535E840289A16A43E7134B053A86773E474C28"),
+			utils::ParseByteArray<Hash256>("6D80E71F00DFB73B358B772AD453AEB652AE347D3E098AE269005A88DA0B84A7"),
+			utils::ParseByteArray<Hash256>("2AE2CA59B5BB29721BFB79FE113929B6E52891CAA29CBF562EBEDC46903FF681"),
+			utils::ParseByteArray<Hash256>("421D6B68A6DF8BB1D5C9ACF7ED44515E77945D42A491BECE68DA009B551EE6CE")
 		};
 
 		std::vector<TransactionInfo> transactionInfos;
@@ -152,8 +154,8 @@ namespace catapult { namespace model {
 		CalculateBlockTransactionsHash(transactionInfoPointers, actualBlockTransactionsHash);
 
 		// Assert:
-		auto expectedHash = "DEFB4BF7ACF2145500087A02C88F8D1FCF27B8DEF4E0FDABE09413D87A3F0D09";
-		EXPECT_EQ(expectedHash, test::ToString(actualBlockTransactionsHash));
+		auto expectedHash = utils::ParseByteArray<Hash256>("DEFB4BF7ACF2145500087A02C88F8D1FCF27B8DEF4E0FDABE09413D87A3F0D09");
+		EXPECT_EQ(expectedHash, actualBlockTransactionsHash);
 	}
 
 	// endregion
@@ -162,15 +164,16 @@ namespace catapult { namespace model {
 
 	TEST(TEST_CLASS, GenerationHashIsCalculatedAsExpected) {
 		// Arrange:
-		auto previousGenerationHash = test::ToArray<Hash256::Size>("57F7DA205008026C776CB6AED843393F04CD458E0AA2D9F1D5F31A402072B2D6");
-		Key publicKey = test::ToArray<Key::Size>("6FB9C930C0AC6BEF09D6DFEBD091AE83C91B35F2C0305B05B4F6F7AF4B6FC1F0");
+		constexpr auto ParseGenerationHash = utils::ParseByteArray<GenerationHash>;
+		auto previousGenerationHash = ParseGenerationHash("57F7DA205008026C776CB6AED843393F04CD458E0AA2D9F1D5F31A402072B2D6");
+		auto publicKey = utils::ParseByteArray<Key>("6FB9C930C0AC6BEF09D6DFEBD091AE83C91B35F2C0305B05B4F6F7AF4B6FC1F0");
 
 		// Act:
 		auto hash = CalculateGenerationHash(previousGenerationHash, publicKey);
 
 		// Assert:
-		auto expectedHash = "575E4F520DC2C026F1C9021FD3773F236F0872A03B4AEFC22A9E0066FF204A23";
-		EXPECT_EQ(expectedHash, test::ToString(hash));
+		auto expectedHash = ParseGenerationHash("575E4F520DC2C026F1C9021FD3773F236F0872A03B4AEFC22A9E0066FF204A23");
+		EXPECT_EQ(expectedHash, hash);
 	}
 
 	// endregion
@@ -249,7 +252,7 @@ namespace catapult { namespace model {
 	TEST(TEST_CLASS, CannotVerifyBlockWithAlteredBlockTransactionsHash) {
 		// Arrange:
 		auto pBlock = CreateSignedBlock(3);
-		pBlock->BlockTransactionsHash[0] ^= 0xFF;
+		pBlock->TransactionsHash[0] ^= 0xFF;
 
 		// Act:
 		auto isVerified = VerifyBlockHeaderSignature(*pBlock);
@@ -292,7 +295,7 @@ namespace catapult { namespace model {
 
 	TEST(TEST_CLASS, CanCalculateBlockTransactionsInfoForBlockWithSingleTransaction) {
 		// Arrange:
-		auto pBlock = test::GenerateBlockWithTransactions(test::ConstTransactions{ test::GenerateRandomTransactionWithSize(123) });
+		auto pBlock = test::GenerateBlockWithTransactions(test::ConstTransactions{ test::GenerateRandomTransactionWithSize(132) });
 		pBlock->FeeMultiplier = BlockFeeMultiplier(3);
 
 		// Act:
@@ -300,13 +303,13 @@ namespace catapult { namespace model {
 
 		// Assert:
 		EXPECT_EQ(1u, blockTransactionsInfo.Count);
-		EXPECT_EQ(Amount(3 * 123), blockTransactionsInfo.TotalFee);
+		EXPECT_EQ(Amount(3 * 132), blockTransactionsInfo.TotalFee);
 	}
 
 	TEST(TEST_CLASS, CanCalculateBlockTransactionsInfoForBlockWithMultipleTransactions) {
 		// Arrange:
 		auto pBlock = test::GenerateBlockWithTransactions(test::ConstTransactions{
-			test::GenerateRandomTransactionWithSize(123),
+			test::GenerateRandomTransactionWithSize(132),
 			test::GenerateRandomTransactionWithSize(222),
 			test::GenerateRandomTransactionWithSize(552)
 		});
@@ -317,7 +320,7 @@ namespace catapult { namespace model {
 
 		// Assert:
 		EXPECT_EQ(3u, blockTransactionsInfo.Count);
-		EXPECT_EQ(Amount(3 * 897), blockTransactionsInfo.TotalFee);
+		EXPECT_EQ(Amount(3 * 906), blockTransactionsInfo.TotalFee);
 	}
 
 	// endregion
@@ -373,17 +376,26 @@ namespace catapult { namespace model {
 			}
 		};
 
-		size_t SumTransactionSizes(const Transactions& transactions) {
+		size_t SumTransactionSizes(const Transactions& transactions, bool includePadding = false) {
 			auto transactionsSize = 0u;
-			for (const auto& pTransaction : transactions)
+			auto lastPaddingSize = 0u;
+			for (const auto& pTransaction : transactions) {
 				transactionsSize += pTransaction->Size;
 
-			return transactionsSize;
+				if (includePadding) {
+					lastPaddingSize = utils::GetPaddingSize(pTransaction->Size, 8);
+					transactionsSize += lastPaddingSize;
+				}
+			}
+
+			return transactionsSize - lastPaddingSize;
 		}
 
 		void AssertTransactionsInBlock(const Block& block, const Transactions& expectedTransactions) {
 			auto transactionCount = 0u;
 			auto transactionsSize = 0u;
+
+			// 1. iterate over block transactions and compare against expected
 			auto expectedIter = expectedTransactions.cbegin();
 			for (const auto& blockTransaction : block.Transactions()) {
 				ASSERT_NE(expectedTransactions.cend(), expectedIter);
@@ -392,8 +404,26 @@ namespace catapult { namespace model {
 				++transactionCount;
 			}
 
+			// 2. check iterated size and count
 			EXPECT_EQ(expectedTransactions.size(), transactionCount);
 			EXPECT_EQ(SumTransactionSizes(expectedTransactions), transactionsSize);
+
+			// 3. check padding bytes
+			std::vector<uint8_t> transactionPaddingBytes;
+			const auto* pTransactionBytes = reinterpret_cast<const uint8_t*>(block.TransactionsPtr());
+			for (auto i = 0u; i < expectedTransactions.size(); ++i) {
+				const auto& pExpectedTransaction = expectedTransactions[i];
+				pTransactionBytes += pExpectedTransaction->Size;
+
+				if (i < expectedTransactions.size() - 1) {
+					auto paddingSize = utils::GetPaddingSize(pExpectedTransaction->Size, 8);
+					transactionPaddingBytes.insert(transactionPaddingBytes.end(), pTransactionBytes, pTransactionBytes + paddingSize);
+					pTransactionBytes += paddingSize;
+				}
+			}
+
+			EXPECT_EQ(SumTransactionSizes(expectedTransactions, true), transactionsSize + transactionPaddingBytes.size());
+			EXPECT_EQ(std::vector<uint8_t>(transactionPaddingBytes.size(), 0), transactionPaddingBytes);
 		}
 
 		template<typename TContainerTraits>
@@ -413,12 +443,12 @@ namespace catapult { namespace model {
 			auto pBlock = CreateBlock(context, static_cast<NetworkIdentifier>(0x17), signer.publicKey(), transactions);
 
 			// Assert:
-			ASSERT_EQ(sizeof(BlockHeader) + SumTransactionSizes(transactions), pBlock->Size);
+			ASSERT_EQ(sizeof(BlockHeader) + SumTransactionSizes(transactions, true), pBlock->Size);
 			EXPECT_EQ(Signature(), pBlock->Signature);
 
-			EXPECT_EQ(signer.publicKey(), pBlock->Signer);
-			EXPECT_EQ(static_cast<NetworkIdentifier>(0x17), pBlock->Network());
-			EXPECT_EQ(Block::Current_Version, pBlock->EntityVersion());
+			EXPECT_EQ(signer.publicKey(), pBlock->SignerPublicKey);
+			EXPECT_EQ(Block::Current_Version, pBlock->Version);
+			EXPECT_EQ(static_cast<NetworkIdentifier>(0x17), pBlock->Network);
 			EXPECT_EQ(Entity_Type_Block, pBlock->Type);
 
 			EXPECT_EQ(Height(1235), pBlock->Height);
@@ -426,10 +456,10 @@ namespace catapult { namespace model {
 			EXPECT_EQ(Difficulty(), pBlock->Difficulty);
 			EXPECT_EQ(BlockFeeMultiplier(), pBlock->FeeMultiplier);
 			EXPECT_EQ(context.BlockHash, pBlock->PreviousBlockHash);
-			EXPECT_EQ(Hash256(), pBlock->BlockTransactionsHash);
-			EXPECT_EQ(Hash256(), pBlock->BlockReceiptsHash);
+			EXPECT_EQ(Hash256(), pBlock->TransactionsHash);
+			EXPECT_EQ(Hash256(), pBlock->ReceiptsHash);
 			EXPECT_EQ(Hash256(), pBlock->StateHash);
-			EXPECT_EQ(Key(), pBlock->Beneficiary);
+			EXPECT_EQ(signer.publicKey(), pBlock->BeneficiaryPublicKey);
 
 			AssertTransactionsInBlock(*pBlock, transactions);
 		}
@@ -461,7 +491,7 @@ namespace catapult { namespace model {
 			auto pBlock = StitchBlock(blockHeader, transactions);
 
 			// Assert:
-			ASSERT_EQ(sizeof(BlockHeader) + SumTransactionSizes(transactions), pBlock->Size);
+			ASSERT_EQ(sizeof(BlockHeader) + SumTransactionSizes(transactions, true), pBlock->Size);
 
 			EXPECT_EQ_MEMORY(
 					reinterpret_cast<const uint8_t*>(&blockHeader) + sizeof(BlockHeader::Size),

@@ -20,12 +20,12 @@
 
 #pragma once
 #include "catapult/cache/CatapultCache.h"
-#include "catapult/cache_core/BlockDifficultyCache.h"
+#include "catapult/cache_core/AccountStateCache.h"
+#include "catapult/cache_core/BlockStatisticCache.h"
 #include "catapult/chain/ExecutionConfiguration.h"
 #include "catapult/model/NotificationPublisher.h"
 #include "catapult/model/NotificationSubscriber.h"
 #include "catapult/utils/Hashers.h"
-#include "catapult/validators/AggregateEntityValidator.h"
 #include "catapult/validators/ValidatorContext.h"
 #include "tests/test/cache/CacheTestUtils.h"
 #include "tests/test/core/NotificationTestUtils.h"
@@ -53,7 +53,7 @@ namespace catapult { namespace test {
 
 	struct MockNotification : public model::Notification {
 	public:
-		MockNotification(const Hash256& hash, size_t id)
+		MockNotification(const Hash256& hash, uint64_t id)
 				: Notification(static_cast<model::NotificationType>(-1), sizeof(MockNotification))
 				, Hash(hash)
 				, Id(id)
@@ -61,16 +61,33 @@ namespace catapult { namespace test {
 
 	public:
 		const Hash256 Hash;
-		size_t Id;
+		uint64_t Id;
 	};
 
 	class MockNotificationPublisher : public model::NotificationPublisher, public ParamsCapture<PublisherParams> {
+	public:
+		MockNotificationPublisher() : m_emulatePublicKeyNotifications(false)
+		{}
+
 	public:
 		void publish(const model::WeakEntityInfo& entityInfo, model::NotificationSubscriber& subscriber) const override {
 			const_cast<MockNotificationPublisher*>(this)->push(entityInfo);
 			subscriber.notify(MockNotification(entityInfo.hash(), 1));
 			subscriber.notify(MockNotification(entityInfo.hash(), 2));
+
+			if (m_emulatePublicKeyNotifications)
+				subscriber.notify(model::AccountPublicKeyNotification(reinterpret_cast<const Key&>(entityInfo.hash())));
 		}
+
+	public:
+		/// Emulates account public key notifications by raising notification with hash coerced to public key.
+		/// \note Tests that rely on this behavior are not using MockTransaction.
+		void emulatePublicKeyNotifications() {
+			m_emulatePublicKeyNotifications = true;
+		}
+
+	private:
+		bool m_emulatePublicKeyNotifications;
 	};
 
 	// endregion
@@ -84,8 +101,8 @@ namespace catapult { namespace test {
 				, SequenceId(notification.Id)
 				, Context(context)
 				, IsPassedMarkedCache(IsMarkedCache(context.Cache))
-				, NumDifficultyInfos(context.Cache.sub<cache::BlockDifficultyCache>().size())
-				, StateCopy(context.State) // make a copy of the state
+				, NumStatistics(context.Cache.sub<cache::BlockStatisticCache>().size())
+				, StateCopy(context.Cache.dependentState()) // make a copy of the state
 		{}
 
 	public:
@@ -93,7 +110,7 @@ namespace catapult { namespace test {
 		const size_t SequenceId;
 		const observers::ObserverContext Context;
 		const bool IsPassedMarkedCache;
-		const size_t NumDifficultyInfos;
+		const size_t NumStatistics;
 		const state::CatapultState StateCopy;
 	};
 
@@ -115,19 +132,42 @@ namespace catapult { namespace test {
 		}
 
 		void notify(const model::Notification& notification, observers::ObserverContext& context) const override {
+			if (model::Core_Register_Account_Public_Key_Notification == notification.Type) {
+				// simulate AccountPublicKeyObserver
+				const auto& publicKey = CastToDerivedNotification<model::AccountPublicKeyNotification>(notification).PublicKey;
+				auto& accountStateCacheDelta = context.Cache.sub<cache::AccountStateCache>();
+				if (observers::NotifyMode::Commit == context.Mode)
+					accountStateCacheDelta.addAccount(publicKey, context.Height);
+				else
+					accountStateCacheDelta.queueRemove(publicKey, context.Height);
+
+				return;
+			}
+
 			const auto& mockNotification = CastToDerivedNotification<MockNotification>(notification);
 			const_cast<MockAggregateNotificationObserver*>(this)->push(mockNotification, context);
 
-			// add a block difficulty info to the cache as a marker
-			auto& cache = context.Cache.sub<cache::BlockDifficultyCache>();
-			if (!m_enableRollbackEmulation || observers::NotifyMode::Commit == context.Mode)
-				cache.insert(state::BlockDifficultyInfo(Height(cache.size() + 1)));
-			else
-				cache.remove(state::BlockDifficultyInfo(Height(cache.size())));
+			addBlockStatisticBreadcrumb(context);
+			addReceiptBreadcrumb(context, mockNotification);
+		}
 
-			// add receipt breadcrumb if enabled
-			if (m_enableReceiptGeneration && observers::NotifyMode::Commit == context.Mode)
-				AddReceiptBreadcrumb(context.StatementBuilder(), mockNotification.Id, cache.size());
+	private:
+		void addBlockStatisticBreadcrumb(observers::ObserverContext& context) const {
+			auto& blockStatisticCache = context.Cache.sub<cache::BlockStatisticCache>();
+			auto markerId = blockStatisticCache.size();
+
+			if (!m_enableRollbackEmulation || observers::NotifyMode::Commit == context.Mode)
+				blockStatisticCache.insert(state::BlockStatistic(Height(markerId + 1)));
+			else
+				blockStatisticCache.remove(state::BlockStatistic(Height(markerId)));
+		}
+
+		void addReceiptBreadcrumb(observers::ObserverContext& context, const MockNotification& mockNotification) const {
+			if (!m_enableReceiptGeneration || observers::NotifyMode::Commit != context.Mode)
+				return;
+
+			auto& blockStatisticCache = context.Cache.sub<cache::BlockStatisticCache>();
+			AddReceiptBreadcrumb(context.StatementBuilder(), mockNotification.Id, blockStatisticCache.size());
 		}
 
 	public:
@@ -136,7 +176,7 @@ namespace catapult { namespace test {
 			m_enableRollbackEmulation = true;
 		}
 
-		/// Enables generation of receipts for every notify (commit) call.
+		/// Enables generation of a receipt for every notify (commit) call.
 		void enableReceiptGeneration() {
 			m_enableReceiptGeneration = true;
 		}
@@ -171,7 +211,7 @@ namespace catapult { namespace test {
 				, SequenceId(notification.Id)
 				, Context(context)
 				, IsPassedMarkedCache(IsMarkedCache(context.Cache))
-				, NumDifficultyInfos(context.Cache.sub<cache::BlockDifficultyCache>().size())
+				, NumStatistics(context.Cache.sub<cache::BlockStatisticCache>().size())
 		{}
 
 	public:
@@ -179,7 +219,7 @@ namespace catapult { namespace test {
 		const size_t SequenceId;
 		const validators::ValidatorContext Context;
 		const bool IsPassedMarkedCache;
-		const size_t NumDifficultyInfos;
+		const size_t NumStatistics;
 	};
 
 	class MockAggregateNotificationValidator
@@ -205,6 +245,9 @@ namespace catapult { namespace test {
 		validators::ValidationResult validate(
 				const model::Notification& notification,
 				const validators::ValidatorContext& context) const override {
+			if (model::Core_Register_Account_Public_Key_Notification == notification.Type)
+				return validators::ValidationResult::Success;
+
 			const auto& mockNotification = CastToDerivedNotification<MockNotification>(notification);
 			const_cast<MockAggregateNotificationValidator*>(this)->push(mockNotification, context);
 
@@ -271,11 +314,11 @@ namespace catapult { namespace test {
 		std::shared_ptr<MockNotificationPublisher> pNotificationPublisher;
 
 	public:
-		/// Asserts observer contexts passed to \a observer reflect \a numInitialCacheDifficultyInfos
+		/// Asserts observer contexts passed to \a observer reflect \a numInitialCacheStatistics
 		/// given \a expectedHeight, \a expectedImportanceHeight and \a isRollbackExecution.
 		static void AssertObserverContexts(
 				const MockAggregateNotificationObserver& observer,
-				size_t numInitialCacheDifficultyInfos,
+				size_t numInitialCacheStatistics,
 				Height expectedHeight,
 				model::ImportanceHeight expectedImportanceHeight,
 				const predicate<size_t>& isRollbackExecution) {
@@ -296,22 +339,22 @@ namespace catapult { namespace test {
 				// - compare the copied state to the default state
 				EXPECT_EQ(expectedImportanceHeight, params.StateCopy.LastRecalculationHeight) << message;
 
-				// - cache contents + sequence (NumDifficultyInfos is incremented by each observer call)
+				// - cache contents + sequence (NumStatistics is incremented by each observer call)
 				EXPECT_TRUE(params.IsPassedMarkedCache) << message;
-				EXPECT_EQ(numInitialCacheDifficultyInfos + i, params.NumDifficultyInfos) << message;
+				EXPECT_EQ(numInitialCacheStatistics + i, params.NumStatistics) << message;
 				++i;
 			}
 		}
 
-		/// Asserts validator contexts passed to \a validator reflect \a expectedNumDifficultyInfos
+		/// Asserts validator contexts passed to \a validator reflect \a expectedNumStatistics
 		/// given \a expectedHeight and \a expectedBlockTime.
 		static void AssertValidatorContexts(
 				const MockAggregateNotificationValidator& validator,
-				const std::vector<size_t>& expectedNumDifficultyInfos,
+				const std::vector<size_t>& expectedNumStatistics,
 				Height expectedHeight,
 				Timestamp expectedBlockTime) {
 			// Assert:
-			ASSERT_EQ(expectedNumDifficultyInfos.size(), validator.params().size());
+			ASSERT_EQ(expectedNumStatistics.size(), validator.params().size());
 
 			size_t i = 0;
 			for (const auto& params : validator.params()) {
@@ -323,9 +366,9 @@ namespace catapult { namespace test {
 				EXPECT_EQ(Mock_Execution_Configuration_Network_Identifier, params.Context.Network.Identifier) << message;
 				EXPECT_EQ(MosaicId(22), params.Context.Resolvers.resolve(UnresolvedMosaicId(11))) << message;
 
-				// - cache contents + sequence (NumDifficultyInfos is incremented by each observer call)
+				// - cache contents + sequence (NumStatistics is incremented by each observer call)
 				EXPECT_TRUE(params.IsPassedMarkedCache) << message;
-				EXPECT_EQ(expectedNumDifficultyInfos[i], params.NumDifficultyInfos) << message;
+				EXPECT_EQ(expectedNumStatistics[i], params.NumStatistics) << message;
 				++i;
 			}
 		}

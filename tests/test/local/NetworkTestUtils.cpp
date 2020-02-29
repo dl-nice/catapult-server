@@ -23,9 +23,9 @@
 #include "catapult/net/PacketWriters.h"
 #include "catapult/net/VerifyPeer.h"
 #include "catapult/thread/TimedCallback.h"
-#include "tests/test/core/AddressTestUtils.h"
 #include "tests/test/net/NodeTestUtils.h"
 #include "tests/test/net/SocketTestUtils.h"
+#include "tests/test/nodeps/KeyTestUtils.h"
 #include "tests/TestHarness.h"
 
 namespace catapult { namespace test {
@@ -40,9 +40,9 @@ namespace catapult { namespace test {
 		auto endpoint = CreateLocalHostNodeEndpoint(port);
 		auto clientKeyPair = GenerateKeyPair();
 		std::shared_ptr<ionet::PacketSocket> pIo;
-		ionet::Connect(ioContext, options, endpoint, [&](auto connectCode, const auto& pConnectedSocket) {
+		ionet::Connect(ioContext, options, endpoint, [&](auto connectCode, const auto& connectedSocketInfo) {
 			CATAPULT_LOG(debug) << "node is connected with code " << connectCode;
-			pIo = pConnectedSocket;
+			pIo = connectedSocketInfo.socket();
 			if (!pIo)
 				return;
 

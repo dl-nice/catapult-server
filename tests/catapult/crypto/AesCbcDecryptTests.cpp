@@ -20,11 +20,14 @@
 
 #include "catapult/crypto/AesCbcDecrypt.h"
 #include "catapult/utils/HexParser.h"
+#include "tests/test/crypto/EncryptionTestUtils.h"
 #include "tests/TestHarness.h"
 
 namespace catapult { namespace crypto {
 
 #define TEST_CLASS AesCbcDecryptTests
+
+	// region TryAesCbcDecrypt
 
 	namespace {
 		SharedKey ParseSharedKey(const std::string& sharedKeyStr) {
@@ -32,8 +35,8 @@ namespace catapult { namespace crypto {
 		}
 
 		auto Concatenate(const std::string& initializationVectorStr, const std::string& cipherText) {
-			auto initializationVector = test::ToVector(initializationVectorStr);
-			auto encrypted = test::ToVector(cipherText);
+			auto initializationVector = test::HexStringToVector(initializationVectorStr);
+			auto encrypted = test::HexStringToVector(cipherText);
 
 			initializationVector.insert(initializationVector.end(), encrypted.cbegin(), encrypted.cend());
 			return initializationVector;
@@ -47,7 +50,7 @@ namespace catapult { namespace crypto {
 			// Arrange:
 			auto key = ParseSharedKey(keyStr);
 			auto encrypted = Concatenate(initializationVectorStr, cipherText);
-			auto expected = test::ToVector(clearText);
+			auto expected = test::HexStringToVector(clearText);
 
 			// Act:
 			std::vector<uint8_t> decrypted;
@@ -69,6 +72,10 @@ namespace catapult { namespace crypto {
 
 			// Assert:
 			EXPECT_FALSE(decryptionResult);
+		}
+
+		KeyPair GenerateKeyPair() {
+			return KeyPair::FromPrivate(PrivateKey::Generate(test::RandomByte));
 		}
 	}
 
@@ -157,4 +164,92 @@ namespace catapult { namespace crypto {
 		// border case, padding is proper except for first padding byte (\0)
 		RunInvalidTestCase("DF4A7C3B9F4756D30FCA0D18E9B28960");
 	}
+
+	TEST(TEST_CLASS, CannotDecryptMessageWithMisalignedSize) {
+		// Assert: generate valid data, but drop random amount of bytes from result
+		auto sharedKey = test::GenerateRandomByteArray<SharedKey>();
+		auto initializationVector = test::GenerateRandomByteArray<AesInitializationVector>();
+		auto input = test::GenerateRandomVector(16);
+		std::vector<uint8_t> encrypted;
+		test::AesCbcEncrypt(sharedKey, initializationVector, input, encrypted, test::AesPkcs7PaddingScheme);
+
+		// - drop random amount between 1-15
+		auto dropSize = 1u + test::RandomByte() % 15;
+		encrypted.resize(encrypted.size() - dropSize);
+
+		// Act:
+		std::vector<uint8_t> decrypted;
+		auto result = TryAesCbcDecrypt(sharedKey, encrypted, decrypted);
+
+		// Assert:
+		EXPECT_FALSE(result) << "drop size: " << dropSize;
+	}
+
+	// endregion
+
+	// region TryDecryptEd25199BlockCipher
+
+	TEST(TEST_CLASS, Ed25199BlockCipher_ThrowsWhenEncryptedDataIsTooSmall) {
+		// Arrange:
+		auto keyPair = GenerateKeyPair();
+		auto encryptedWithKey = test::GenerateRandomVector(Key::Size - 1);
+
+		// Act + Assert:
+		std::vector<uint8_t> decrypted;
+		EXPECT_THROW(TryDecryptEd25199BlockCipher(encryptedWithKey, keyPair, decrypted), catapult_invalid_argument);
+	}
+
+	namespace {
+		void AssertNotEnoughDataFailure(size_t size) {
+			// Arrange:
+			auto keyPair = GenerateKeyPair();
+			auto encryptedWithKey = test::GenerateRandomVector(size);
+
+			// Act:
+			std::vector<uint8_t> decrypted;
+			auto result = TryDecryptEd25199BlockCipher(encryptedWithKey, keyPair, decrypted);
+
+			// Assert:
+			EXPECT_FALSE(result);
+		}
+	}
+
+	TEST(TEST_CLASS, Ed25199BlockCipher_FailsWhenEncryptedDataDoesNotContainInitializationVector) {
+		AssertNotEnoughDataFailure(Key::Size + AesInitializationVector::Size - 1);
+	}
+
+	TEST(TEST_CLASS, Ed25199BlockCipher_FailsWhenEncryptedDataDoesNotContainPadding) {
+		AssertNotEnoughDataFailure(Key::Size + AesInitializationVector::Size + 16 - 1);
+	}
+
+	namespace {
+		void AssertDecryptEd25199BlockCipher(size_t dataSize, size_t expectedEncryptedSize) {
+			// Arrange:
+			auto clearText = test::GenerateRandomVector(dataSize);
+			auto recipientKeyPair = GenerateKeyPair();
+			auto prefixedEncrypted = test::GenerateEphemeralAndEncrypt(clearText, recipientKeyPair.publicKey());
+
+			// Sanity:
+			EXPECT_EQ(expectedEncryptedSize, prefixedEncrypted.size());
+
+			// Act:
+			std::vector<uint8_t> decrypted;
+			auto result = TryDecryptEd25199BlockCipher(prefixedEncrypted, recipientKeyPair, decrypted);
+
+			// Assert:
+			EXPECT_TRUE(result);
+			EXPECT_EQ(clearText, decrypted);
+		}
+	}
+
+	TEST(TEST_CLASS, Ed25199BlockCipher_CanDecryptEmptyMessage) {
+		AssertDecryptEd25199BlockCipher(0, Key::Size + AesInitializationVector::Size + 16);
+	}
+
+	TEST(TEST_CLASS, Ed25199BlockCipher_CanDecryptMessage) {
+		// padding size = 16 - (123 % 16) = 5
+		AssertDecryptEd25199BlockCipher(123, Key::Size + AesInitializationVector::Size + 123 + 5);
+	}
+
+	// endregion
 }}

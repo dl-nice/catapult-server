@@ -36,7 +36,7 @@ namespace catapult { namespace extensions {
 
 	namespace {
 		std::vector<std::string> GetDefaultSystemPluginNames() {
-			return { "catapult.coresystem", "catapult.plugins.signature" };
+			return { "catapult.plugins.coresystem", "catapult.plugins.signature" };
 		}
 	}
 
@@ -71,15 +71,19 @@ namespace catapult { namespace extensions {
 
 	// region network time supplier
 
+	namespace {
+		constexpr auto Epoch_Adjustment = utils::TimeSpan::FromMilliseconds(1459468800000);
+	}
+
 	TEST(TEST_CLASS, CanUseDefaultNetworkTimeSupplierWhenUnset) {
 		// Arrange:
 		ExtensionManager manager;
-		auto supplier = manager.networkTimeSupplier();
+		auto supplier = manager.networkTimeSupplier(Epoch_Adjustment);
 
 		// Act: get the time
-		auto startTime = utils::NetworkTime();
+		auto startTime = utils::NetworkTime(Epoch_Adjustment).now();
 		auto time = supplier();
-		auto endTime = utils::NetworkTime();
+		auto endTime = utils::NetworkTime(Epoch_Adjustment).now();
 
 		// Assert: network time provider was used
 		EXPECT_LE(startTime, time);
@@ -90,7 +94,7 @@ namespace catapult { namespace extensions {
 		// Arrange:
 		ExtensionManager manager;
 		manager.setNetworkTimeSupplier([]() { return Timestamp(123); });
-		auto supplier = manager.networkTimeSupplier();
+		auto supplier = manager.networkTimeSupplier(Epoch_Adjustment);
 
 		// Act:
 		auto time = supplier();

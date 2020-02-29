@@ -36,7 +36,7 @@ namespace catapult { namespace cache {
 	/// \note std::set is used to allow incomplete type.
 	using TransactionDataContainer = std::set<TransactionData>;
 
-	/// A read only view on top of unconfirmed transactions cache.
+	/// Read only view on top of unconfirmed transactions cache.
 	class MemoryUtCacheView {
 	private:
 		using UnknownTransactions = std::vector<std::shared_ptr<const model::Transaction>>;
@@ -53,7 +53,7 @@ namespace catapult { namespace cache {
 				utils::SpinReaderWriterLock::ReaderLockGuard&& readLock);
 
 	public:
-		/// Returns the number of unconfirmed transactions in the cache.
+		/// Gets the number of unconfirmed transactions in the cache.
 		size_t size() const;
 
 		/// Returns \c true if the cache contains an unconfirmed transaction with associated \a hash, \c false otherwise.
@@ -63,7 +63,7 @@ namespace catapult { namespace cache {
 		void forEach(const TransactionInfoConsumer& consumer) const;
 
 		/// Gets a range of short hashes of all transactions in the cache.
-		/// A short hash consists of the first 4 bytes of the complete hash.
+		/// Each short hash consists of the first 4 bytes of the complete hash.
 		model::ShortHashRange shortHashes() const;
 
 		/// Gets a vector of all transactions in the cache that have a fee multiplier at least \a minFeeMultiplier
@@ -77,8 +77,19 @@ namespace catapult { namespace cache {
 		utils::SpinReaderWriterLock::ReaderLockGuard m_readLock;
 	};
 
+	/// Interface (read write) for caching unconfirmed transactions.
+	class PLUGIN_API_DEPENDENCY ReadWriteUtCache : public UtCache {
+	public:
+		/// Gets a read only view based on this cache.
+		virtual MemoryUtCacheView view() const = 0;
+	};
+
 	/// Cache for all unconfirmed transactions.
-	class MemoryUtCache : public UtCache {
+	class MemoryUtCache : public ReadWriteUtCache {
+	public:
+		using CacheWriteOnlyInterface = UtCache;
+		using CacheReadWriteInterface = ReadWriteUtCache;
+
 	public:
 		/// Creates an unconfirmed transactions cache around \a options.
 		explicit MemoryUtCache(const MemoryCacheOptions& options);
@@ -87,10 +98,8 @@ namespace catapult { namespace cache {
 		~MemoryUtCache() override;
 
 	public:
-		/// Gets a read only view based on this cache.
-		MemoryUtCacheView view() const;
+		MemoryUtCacheView view() const override;
 
-	public:
 		UtCacheModifierProxy modifier() override;
 
 	private:
@@ -103,8 +112,8 @@ namespace catapult { namespace cache {
 		mutable utils::SpinReaderWriterLock m_lock;
 	};
 
-	/// A delegating proxy around a MemoryUtCache.
-	class MemoryUtCacheProxy : public MemoryCacheProxy<MemoryUtCache, UtCache, UtCacheModifierProxy> {
-		using MemoryCacheProxy<MemoryUtCache, UtCache, UtCacheModifierProxy>::MemoryCacheProxy;
+	/// Delegating proxy around a MemoryUtCache.
+	class MemoryUtCacheProxy : public MemoryCacheProxy<MemoryUtCache> {
+		using MemoryCacheProxy<MemoryUtCache>::MemoryCacheProxy;
 	};
 }}

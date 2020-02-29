@@ -42,17 +42,17 @@ namespace catapult { namespace builders {
 		/// Sets the restriction key to \a restrictionKey.
 		void setRestrictionKey(uint64_t restrictionKey);
 
-		/// Sets the address being restricted to \a targetAddress.
-		void setTargetAddress(const UnresolvedAddress& targetAddress);
-
 		/// Sets the previous restriction value to \a previousRestrictionValue.
 		void setPreviousRestrictionValue(uint64_t previousRestrictionValue);
 
 		/// Sets the new restriction value to \a newRestrictionValue.
 		void setNewRestrictionValue(uint64_t newRestrictionValue);
 
+		/// Sets the address being restricted to \a targetAddress.
+		void setTargetAddress(const UnresolvedAddress& targetAddress);
+
 	public:
-		/// Returns size of mosaic address restriction transaction.
+		/// Gets the size of mosaic address restriction transaction.
 		/// \note This returns size of a normal transaction not embedded transaction.
 		size_t size() const;
 
@@ -72,8 +72,8 @@ namespace catapult { namespace builders {
 	private:
 		UnresolvedMosaicId m_mosaicId;
 		uint64_t m_restrictionKey;
-		UnresolvedAddress m_targetAddress;
 		uint64_t m_previousRestrictionValue;
 		uint64_t m_newRestrictionValue;
+		UnresolvedAddress m_targetAddress;
 	};
 }}

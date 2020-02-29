@@ -68,12 +68,12 @@ namespace catapult { namespace builders {
 			static constexpr auto Entity_Type = model::Entity_Type_Mosaic_Metadata;
 
 			static void SetTargetId(BuilderType& builder, uint64_t rawTargetId) {
-				builder.setTargetId(UnresolvedMosaicId(rawTargetId));
+				builder.setTargetMosaicId(UnresolvedMosaicId(rawTargetId));
 			}
 
 			template<typename TTransaction>
 			static void AssertAdditionalProperties(const TransactionProperties& expectedProperties, const TTransaction& transaction) {
-				EXPECT_EQ(UnresolvedMosaicId(expectedProperties.RawTargetId), transaction.TargetId);
+				EXPECT_EQ(UnresolvedMosaicId(expectedProperties.RawTargetId), transaction.TargetMosaicId);
 			}
 		};
 
@@ -85,12 +85,12 @@ namespace catapult { namespace builders {
 			static constexpr auto Entity_Type = model::Entity_Type_Namespace_Metadata;
 
 			static void SetTargetId(BuilderType& builder, uint64_t rawTargetId) {
-				builder.setTargetId(NamespaceId(rawTargetId));
+				builder.setTargetNamespaceId(NamespaceId(rawTargetId));
 			}
 
 			template<typename TTransaction>
 			static void AssertAdditionalProperties(const TransactionProperties& expectedProperties, const TTransaction& transaction) {
-				EXPECT_EQ(NamespaceId(expectedProperties.RawTargetId), transaction.TargetId);
+				EXPECT_EQ(NamespaceId(expectedProperties.RawTargetId), transaction.TargetNamespaceId);
 			}
 		};
 
@@ -116,19 +116,20 @@ namespace catapult { namespace builders {
 				const TransactionProperties& expectedProperties,
 				const consumer<typename TTraits::BuilderType&>& buildTransaction) {
 			// Arrange:
-			auto networkId = static_cast<model::NetworkIdentifier>(0x62);
+			auto networkIdentifier = static_cast<model::NetworkIdentifier>(0x62);
 			auto signer = test::GenerateRandomByteArray<Key>();
 
 			// Act:
-			typename TTraits::BuilderType builder(networkId, signer);
+			typename TTraits::BuilderType builder(networkIdentifier, signer);
 			buildTransaction(builder);
 			auto pTransaction = TTraits::TransactionTraits::InvokeBuilder(builder);
 
 			// Assert:
 			TTraits::TransactionTraits::CheckBuilderSize(expectedProperties.Value.size(), builder);
 			TTraits::TransactionTraits::CheckFields(expectedProperties.Value.size(), *pTransaction);
-			EXPECT_EQ(signer, pTransaction->Signer);
-			EXPECT_EQ(0x6201, pTransaction->Version);
+			EXPECT_EQ(signer, pTransaction->SignerPublicKey);
+			EXPECT_EQ(1u, pTransaction->Version);
+			EXPECT_EQ(static_cast<model::NetworkIdentifier>(0x62), pTransaction->Network);
 			EXPECT_EQ(TTraits::Entity_Type, pTransaction->Type);
 
 			AssertTransactionProperties(expectedProperties, *pTransaction);

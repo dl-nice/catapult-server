@@ -22,8 +22,11 @@
 #include "FileStateChangeStorage.h"
 #include "MemoryCounters.h"
 #include "NemesisBlockNotifier.h"
+#include "NodeContainerSubscriberAdapter.h"
 #include "NodeUtils.h"
+#include "StaticNodeRefreshService.h"
 #include "catapult/config/CatapultDataDirectory.h"
+#include "catapult/extensions/CommitStepHandler.h"
 #include "catapult/extensions/ConfigurationUtils.h"
 #include "catapult/extensions/LocalNodeChainScore.h"
 #include "catapult/extensions/LocalNodeStateFileStorage.h"
@@ -58,9 +61,23 @@ namespace catapult { namespace local {
 
 		std::unique_ptr<subscribers::NodeSubscriber> CreateNodeSubscriber(
 				subscribers::SubscriptionManager& subscriptionManager,
-				ionet::NodeContainer& nodes) {
-			subscriptionManager.addNodeSubscriber(CreateNodeContainerSubscriberAdapter(nodes));
+				ionet::NodeContainer& nodes,
+				const std::unordered_set<std::string>& localNetworks) {
+			subscriptionManager.addNodeSubscriber(CreateNodeContainerSubscriberAdapter(nodes, localNetworks));
 			return subscriptionManager.createNodeSubscriber();
+		}
+
+		void AddNodeCounters(std::vector<utils::DiagnosticCounter>& counters, const ionet::NodeContainer& nodes) {
+			counters.emplace_back(utils::DiagnosticCounterId("NODES"), [&nodes]() {
+				return nodes.view().size();
+			});
+
+			counters.emplace_back(utils::DiagnosticCounterId("BAN ACT"), [&nodes]() {
+				return nodes.view().bannedNodesSize();
+			});
+			counters.emplace_back(utils::DiagnosticCounterId("BAN ALL"), [&nodes]() {
+				return nodes.view().bannedNodesDeepSize();
+			});
 		}
 
 		class DefaultLocalNode final : public LocalNode {
@@ -70,7 +87,11 @@ namespace catapult { namespace local {
 					, m_serviceLocator(keyPair)
 					, m_config(m_pBootstrapper->config())
 					, m_dataDirectory(config::CatapultDataDirectoryPreparer::Prepare(m_config.User.DataDirectory))
-					, m_nodes(m_config.Node.MaxTrackedNodes, m_pBootstrapper->extensionManager().networkTimeSupplier())
+					, m_nodes(
+							m_config.Node.MaxTrackedNodes,
+							m_config.BlockChain.Network.NodeEqualityStrategy,
+							GetBanSettings(m_config.Node.Banning),
+							m_pBootstrapper->extensionManager().networkTimeSupplier(m_config.BlockChain.Network.EpochAdjustment))
 					, m_catapultCache({}) // note that sub caches are added in boot
 					, m_storage(
 							m_pBootstrapper->subscriptionManager().createBlockStorage(m_pBlockChangeSubscriber),
@@ -81,10 +102,11 @@ namespace catapult { namespace local {
 							m_pBootstrapper->subscriptionManager(),
 							m_catapultCache,
 							m_dataDirectory))
-					, m_pNodeSubscriber(CreateNodeSubscriber(m_pBootstrapper->subscriptionManager(), m_nodes))
+					, m_pNodeSubscriber(CreateNodeSubscriber(m_pBootstrapper->subscriptionManager(), m_nodes, m_config.Node.LocalNetworks))
 					, m_pluginManager(m_pBootstrapper->pluginManager())
 					, m_isBooted(false) {
-				SeedNodeContainer(m_nodes, *m_pBootstrapper);
+				ValidateNodes(m_pBootstrapper->staticNodes());
+				AddLocalNode(m_nodes, m_pBootstrapper->config());
 			}
 
 			~DefaultLocalNode() override {
@@ -108,15 +130,15 @@ namespace catapult { namespace local {
 
 				CATAPULT_LOG(debug) << "booting extension services";
 				auto& extensionManager = m_pBootstrapper->extensionManager();
+				extensionManager.addServiceRegistrar(CreateStaticNodeRefreshServiceRegistrar(m_pBootstrapper->staticNodes()));
 				auto serviceState = extensions::ServiceState(
 						m_config,
 						m_nodes,
 						m_catapultCache,
-						m_catapultState,
 						m_storage,
 						m_score,
 						*m_pUtCache,
-						extensionManager.networkTimeSupplier(),
+						extensionManager.networkTimeSupplier(m_config.BlockChain.Network.EpochAdjustment),
 						*m_pTransactionStatusSubscriber,
 						*m_pStateChangeSubscriber,
 						*m_pNodeSubscriber,
@@ -138,14 +160,17 @@ namespace catapult { namespace local {
 		private:
 			void registerCounters() {
 				AddMemoryCounters(m_counters);
-				m_counters.emplace_back(utils::DiagnosticCounterId("TOT CONF TXES"), [&state = m_catapultState]() {
-					return state.NumTotalTransactions;
+				const auto& catapultCache = m_catapultCache;
+				m_counters.emplace_back(utils::DiagnosticCounterId("TOT CONF TXES"), [&catapultCache]() {
+					return catapultCache.createView().dependentState().NumTotalTransactions;
 				});
 
 				m_pluginManager.addDiagnosticCounters(m_counters, m_catapultCache); // add cache counters
 				m_counters.emplace_back(utils::DiagnosticCounterId("UT CACHE"), [&source = *m_pUtCache]() {
 					return source.view().size();
 				});
+
+				AddNodeCounters(m_counters, m_nodes);
 			}
 
 			bool executeAndNotifyNemesis() {
@@ -160,8 +185,12 @@ namespace catapult { namespace local {
 
 				notifier.raise(*m_pStateChangeSubscriber);
 
+				// indicate the nemesis block is fully updated so that it can be processed downstream immediately
+				auto commitStep = extensions::CreateCommitStepHandler(m_dataDirectory);
+				commitStep(consumers::CommitOperationStep::All_Updated);
+
 				// skip next *two* messages because subscriber creates two files during raise (score change and state change)
-				if (m_config.Node.ShouldEnableAutoSyncCleanup)
+				if (m_config.Node.EnableAutoSyncCleanup)
 					io::FileQueueReader(m_dataDirectory.spoolDir("state_change").str(), "index_server_r.dat", "index_server.dat").skip(2);
 
 				return true;
@@ -195,7 +224,7 @@ namespace catapult { namespace local {
 					return;
 
 				constexpr auto SaveStateToDirectoryWithCheckpointing = extensions::SaveStateToDirectoryWithCheckpointing;
-				SaveStateToDirectoryWithCheckpointing(m_dataDirectory, m_config.Node, m_catapultCache, m_catapultState, m_score.get());
+				SaveStateToDirectoryWithCheckpointing(m_dataDirectory, m_config.Node, m_catapultCache, m_score.get());
 			}
 
 		public:
@@ -222,7 +251,7 @@ namespace catapult { namespace local {
 
 		private:
 			extensions::LocalNodeStateRef stateRef() {
-				return extensions::LocalNodeStateRef(m_config, m_catapultState, m_catapultCache, m_storage, m_score);
+				return extensions::LocalNodeStateRef(m_config, m_catapultCache, m_storage, m_score);
 			}
 
 		private:
@@ -237,7 +266,6 @@ namespace catapult { namespace local {
 			ionet::NodeContainer m_nodes;
 
 			cache::CatapultCache m_catapultCache;
-			state::CatapultState m_catapultState;
 			io::BlockStorageCache m_storage;
 			extensions::LocalNodeChainScore m_score;
 			std::unique_ptr<cache::MemoryUtCacheProxy> m_pUtCache;

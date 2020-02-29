@@ -37,17 +37,17 @@ namespace catapult { namespace builders {
 		TransferBuilder(model::NetworkIdentifier networkIdentifier, const Key& signer);
 
 	public:
-		/// Sets the transaction recipient to \a recipient.
-		void setRecipient(const UnresolvedAddress& recipient);
-
-		/// Sets the transaction message to \a message.
-		void setMessage(const RawBuffer& message);
+		/// Sets the recipient address to \a recipientAddress.
+		void setRecipientAddress(const UnresolvedAddress& recipientAddress);
 
 		/// Adds \a mosaic to attached mosaics.
 		void addMosaic(const model::UnresolvedMosaic& mosaic);
 
+		/// Sets the attached message to \a message.
+		void setMessage(const RawBuffer& message);
+
 	public:
-		/// Returns size of transfer transaction.
+		/// Gets the size of transfer transaction.
 		/// \note This returns size of a normal transaction not embedded transaction.
 		size_t size() const;
 
@@ -65,8 +65,8 @@ namespace catapult { namespace builders {
 		std::unique_ptr<TTransaction> buildImpl() const;
 
 	private:
-		UnresolvedAddress m_recipient;
-		std::vector<uint8_t> m_message;
+		UnresolvedAddress m_recipientAddress;
 		std::vector<model::UnresolvedMosaic> m_mosaics;
+		std::vector<uint8_t> m_message;
 	};
 }}

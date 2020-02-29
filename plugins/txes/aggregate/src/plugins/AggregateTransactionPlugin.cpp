@@ -33,6 +33,10 @@ namespace catapult { namespace plugins {
 			return static_cast<const AggregateTransaction&>(transaction);
 		}
 
+		uint32_t CountTransactions(const AggregateTransaction& aggregate) {
+			return static_cast<uint32_t>(std::distance(aggregate.Transactions().cbegin(), aggregate.Transactions().cend()));
+		}
+
 		class AggregateTransactionPlugin : public TransactionPlugin {
 		public:
 			AggregateTransactionPlugin(
@@ -66,15 +70,20 @@ namespace catapult { namespace plugins {
 				const auto& aggregate = CastToDerivedType(transactionInfo.entity());
 
 				// publish aggregate notifications
-				// (notice that this must be raised before embedded transaction notifications in order for cosigner aggregation to work)
+				// (notice that this must be raised before embedded transaction notifications in order for cosignatory aggregation to work)
 				auto numCosignatures = aggregate.CosignaturesCount();
-				auto numTransactions = std::distance(aggregate.Transactions().cbegin(), aggregate.Transactions().cend());
+				auto numTransactions = CountTransactions(aggregate);
 				sub.notify(AggregateCosignaturesNotification(
-						aggregate.Signer,
-						static_cast<uint32_t>(numTransactions),
+						aggregate.SignerPublicKey,
+						numTransactions,
 						aggregate.TransactionsPtr(),
 						numCosignatures,
 						aggregate.CosignaturesPtr()));
+
+				sub.notify(AggregateEmbeddedTransactionsNotification(
+						aggregate.TransactionsHash,
+						numTransactions,
+						aggregate.TransactionsPtr()));
 
 				// publish all sub-transaction information
 				for (const auto& subTransaction : aggregate.Transactions()) {
@@ -88,14 +97,14 @@ namespace catapult { namespace plugins {
 					auto subTransactionAttributes = plugin.attributes();
 
 					sub.notify(EntityNotification(
-							subTransaction.Network(),
-							subTransaction.EntityVersion(),
+							subTransaction.Network,
+							subTransaction.Version,
 							subTransactionAttributes.MinVersion,
 							subTransactionAttributes.MaxVersion));
 
 					// - generic sub-transaction notification
 					sub.notify(AggregateEmbeddedTransactionNotification(
-							aggregate.Signer,
+							aggregate.SignerPublicKey,
 							subTransaction,
 							numCosignatures,
 							aggregate.CosignaturesPtr()));
@@ -105,13 +114,13 @@ namespace catapult { namespace plugins {
 					plugin.publish(subTransaction, sub);
 				}
 
-				// publish all cosigner information (as an optimization these are published with the source of the last sub-transaction)
+				// publish all cosignatory information (as an optimization these are published with the source of the last sub-transaction)
 				const auto* pCosignature = aggregate.CosignaturesPtr();
 				for (auto i = 0u; i < numCosignatures; ++i) {
-					// - notice that all valid cosigners must have been observed previously as part of either
+					// - notice that all valid cosignatories must have been observed previously as part of either
 					//   (1) sub-transaction execution or (2) composite account setup
-					// - require the cosigners to sign the aggregate indirectly via the hash of its data
-					sub.notify(SignatureNotification(pCosignature->Signer, pCosignature->Signature, transactionInfo.hash()));
+					// - require the cosignatories to sign the aggregate indirectly via the hash of its data
+					sub.notify(SignatureNotification(pCosignature->SignerPublicKey, pCosignature->Signature, transactionInfo.hash()));
 					++pCosignature;
 				}
 			}
@@ -122,7 +131,7 @@ namespace catapult { namespace plugins {
 				auto headerSize = VerifiableEntity::Header_Size;
 				return {
 					reinterpret_cast<const uint8_t*>(&aggregate) + headerSize,
-					sizeof(AggregateTransaction) - headerSize + aggregate.PayloadSize
+					sizeof(AggregateTransaction) - headerSize - AggregateTransaction::Footer_Size
 				};
 			}
 
@@ -133,7 +142,7 @@ namespace catapult { namespace plugins {
 				auto numCosignatures = aggregate.CosignaturesCount();
 				const auto* pCosignature = aggregate.CosignaturesPtr();
 				for (auto i = 0u; i < numCosignatures; ++i) {
-					buffers.push_back(pCosignature->Signer);
+					buffers.push_back(pCosignature->SignerPublicKey);
 					++pCosignature;
 				}
 

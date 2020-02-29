@@ -20,6 +20,7 @@
 
 #pragma once
 #include "catapult/utils/ArraySet.h"
+#include "catapult/plugins.h"
 
 namespace catapult { namespace state {
 
@@ -33,66 +34,66 @@ namespace catapult { namespace state {
 		{}
 
 	public:
-		/// Gets cosignatory account keys.
-		const utils::SortedKeySet& cosignatories() const {
-			return m_cosignatories;
+		/// Gets the (const) cosignatory account keys.
+		const utils::SortedKeySet& cosignatoryPublicKeys() const {
+			return m_cosignatoryPublicKeys;
 		}
 
-		/// Gets cosignatory account keys.
-		utils::SortedKeySet& cosignatories() {
-			return m_cosignatories;
+		/// Gets the cosignatory account keys.
+		utils::SortedKeySet& cosignatoryPublicKeys() {
+			return m_cosignatoryPublicKeys;
 		}
 
 		/// Returns \c true if \a key is a cosignatory.
 		bool hasCosignatory(const Key& key) const {
-			return m_cosignatories.end() != m_cosignatories.find(key);
+			return m_cosignatoryPublicKeys.end() != m_cosignatoryPublicKeys.find(key);
 		}
 
 		/// Gets the number of cosignatories required when approving (any) transaction.
-		uint8_t minApproval() const {
+		uint32_t minApproval() const {
 			return m_minApproval;
 		}
 
 		/// Sets the number of cosignatories required (\a minApproval) when approving (any) transaction.
-		void setMinApproval(uint8_t minApproval) {
+		void setMinApproval(uint32_t minApproval) {
 			m_minApproval = minApproval;
 		}
 
 		/// Gets the number of cosignatories required when removing an account.
-		uint8_t minRemoval() const {
+		uint32_t minRemoval() const {
 			return m_minRemoval;
 		}
 
 		/// Sets the number of cosignatories required (\a minRemoval) when removing an account.
-		void setMinRemoval(uint8_t minRemoval) {
+		void setMinRemoval(uint32_t minRemoval) {
 			m_minRemoval = minRemoval;
 		}
 
 	private:
-		utils::SortedKeySet m_cosignatories;
-		uint8_t m_minApproval;
-		uint8_t m_minRemoval;
+		utils::SortedKeySet m_cosignatoryPublicKeys;
+		uint32_t m_minApproval;
+		uint32_t m_minRemoval;
 	};
 
 	/// Mixin for storing information about accounts that current account can cosign.
 	class MultisigCosignatoryOfMixin {
 	public:
-		/// Gets multisig account keys.
-		const utils::SortedKeySet& multisigAccounts() const {
-			return m_multisigAccounts;
+		/// Gets the (const) multisig account keys.
+		const utils::SortedKeySet& multisigPublicKeys() const {
+			return m_multisigPublicKeys;
 		}
 
-		/// Gets multisig account keys.
-		utils::SortedKeySet& multisigAccounts() {
-			return m_multisigAccounts;
+		/// Gets the multisig account keys.
+		utils::SortedKeySet& multisigPublicKeys() {
+			return m_multisigPublicKeys;
 		}
 
 	private:
-		utils::SortedKeySet m_multisigAccounts;
+		utils::SortedKeySet m_multisigPublicKeys;
 	};
 
 	/// Multisig entry.
-	class MultisigEntry : public MultisigCosignatoriesMixin, public MultisigCosignatoryOfMixin {
+	class PLUGIN_API_DEPENDENCY MultisigEntry : public MultisigCosignatoriesMixin, public MultisigCosignatoryOfMixin {
 	public:
 		/// Creates a multisig entry around \a key.
 		explicit MultisigEntry(const Key& key) : m_key(key)

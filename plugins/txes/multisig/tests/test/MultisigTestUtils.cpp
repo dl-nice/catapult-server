@@ -30,34 +30,41 @@ namespace catapult { namespace test {
 		return test::GenerateRandomDataVector<Key>(count);
 	}
 
-	std::vector<model::Cosignature> GenerateCosignaturesFromCosigners(const std::vector<Key>& cosigners) {
-		auto cosignatures = test::GenerateRandomDataVector<model::Cosignature>(cosigners.size());
-		for (auto i = 0u; i < cosigners.size(); ++i)
-			cosignatures[i].Signer = cosigners[i];
+	std::vector<model::Cosignature> GenerateCosignaturesFromCosignatories(const std::vector<Key>& cosignatories) {
+		auto cosignatures = test::GenerateRandomDataVector<model::Cosignature>(cosignatories.size());
+		for (auto i = 0u; i < cosignatories.size(); ++i)
+			cosignatures[i].SignerPublicKey = cosignatories[i];
 
 		return cosignatures;
 	}
 
-	std::unique_ptr<model::EmbeddedModifyMultisigAccountTransaction> CreateModifyMultisigAccountTransaction(
+	std::unique_ptr<model::EmbeddedMultisigAccountModificationTransaction> CreateMultisigAccountModificationTransaction(
 			const Key& signer,
-			const std::vector<model::CosignatoryModificationType>& modificationTypes) {
-		using TransactionType = model::EmbeddedModifyMultisigAccountTransaction;
-		auto numModifications = static_cast<uint8_t>(modificationTypes.size());
-		uint32_t entitySize = sizeof(TransactionType) + numModifications * sizeof(model::CosignatoryModification);
+			uint8_t numAdditions,
+			uint8_t numDeletions) {
+		using TransactionType = model::EmbeddedMultisigAccountModificationTransaction;
+		uint32_t entitySize = sizeof(TransactionType) + (numAdditions + numDeletions) * Key::Size;
 		auto pTransaction = utils::MakeUniqueWithSize<TransactionType>(entitySize);
+		test::FillWithRandomData({ reinterpret_cast<uint8_t*>(pTransaction.get()), entitySize });
+
 		pTransaction->Size = entitySize;
-		pTransaction->ModificationsCount = numModifications;
-		pTransaction->Type = model::Entity_Type_Modify_Multisig_Account;
-		pTransaction->Signer = signer;
-
-		auto* pModification = pTransaction->ModificationsPtr();
-		for (auto i = 0u; i < numModifications; ++i) {
-			pModification->ModificationType = modificationTypes[i];
-			test::FillWithRandomData(pModification->CosignatoryPublicKey);
-			++pModification;
-		}
-
+		pTransaction->PublicKeyAdditionsCount = numAdditions;
+		pTransaction->PublicKeyDeletionsCount = numDeletions;
+		pTransaction->Type = model::Entity_Type_Multisig_Account_Modification;
+		pTransaction->SignerPublicKey = signer;
 		return pTransaction;
+	}
+
+	model::MultisigCosignatoriesNotification CreateMultisigCosignatoriesNotification(
+			const Key& signer,
+			const std::vector<Key>& publicKeyAdditions,
+			const std::vector<Key>& publicKeyDeletions) {
+		return model::MultisigCosignatoriesNotification(
+				signer,
+				static_cast<uint8_t>(publicKeyAdditions.size()),
+				publicKeyAdditions.data(),
+				static_cast<uint8_t>(publicKeyDeletions.size()),
+				publicKeyDeletions.data());
 	}
 
 	namespace {
@@ -73,8 +80,8 @@ namespace catapult { namespace test {
 			cache::CatapultCacheDelta& cache,
 			const Key& multisigKey,
 			const std::vector<Key>& cosignatoryKeys,
-			uint8_t minApproval,
-			uint8_t minRemoval) {
+			uint32_t minApproval,
+			uint32_t minRemoval) {
 		auto& multisigCache = cache.sub<cache::MultisigCache>();
 
 		auto& multisigEntry = GetOrCreateEntry(multisigCache, multisigKey);
@@ -83,10 +90,10 @@ namespace catapult { namespace test {
 
 		// add all cosignatories
 		for (const auto& cosignatoryKey : cosignatoryKeys) {
-			multisigEntry.cosignatories().insert(cosignatoryKey);
+			multisigEntry.cosignatoryPublicKeys().insert(cosignatoryKey);
 
 			auto& cosignatoryEntry = GetOrCreateEntry(multisigCache, cosignatoryKey);
-			cosignatoryEntry.multisigAccounts().insert(multisigKey);
+			cosignatoryEntry.multisigPublicKeys().insert(multisigKey);
 		}
 	}
 
@@ -103,7 +110,7 @@ namespace catapult { namespace test {
 
 		EXPECT_EQ(expectedEntry.key(), entry.key());
 
-		AssertEqual(expectedEntry.cosignatories(), entry.cosignatories());
-		AssertEqual(expectedEntry.multisigAccounts(), entry.multisigAccounts());
+		AssertEqual(expectedEntry.cosignatoryPublicKeys(), entry.cosignatoryPublicKeys());
+		AssertEqual(expectedEntry.multisigPublicKeys(), entry.multisigPublicKeys());
 	}
 }}

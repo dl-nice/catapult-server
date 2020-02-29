@@ -43,17 +43,17 @@ namespace catapult { namespace model {
 		/// Identifier of the mosaic providing the restriction key.
 		UnresolvedMosaicId ReferenceMosaicId;
 
-		/// Restriction key relative to the reference mosaic id.
+		/// Restriction key relative to the reference mosaic identifier.
 		uint64_t RestrictionKey;
 
 		/// Previous restriction value.
 		uint64_t PreviousRestrictionValue;
 
-		/// Previous restriction type.
-		MosaicRestrictionType PreviousRestrictionType;
-
 		/// New restriction value.
 		uint64_t NewRestrictionValue;
+
+		/// Previous restriction type.
+		MosaicRestrictionType PreviousRestrictionType;
 
 		/// New restriction type.
 		MosaicRestrictionType NewRestrictionType;

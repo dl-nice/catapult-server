@@ -90,7 +90,7 @@ namespace catapult { namespace mongo { namespace storages {
 		static constexpr auto GetId = TDescriptor::GetKeyFromValue;
 	};
 
-	/// A mongo cache storage that persists historical cache data using delete and insert.
+	/// Mongo cache storage that persists historical cache data using delete and insert.
 	template<typename TCacheTraits>
 	class MongoHistoricalCacheStorage : public ExternalCacheStorageT<typename TCacheTraits::CacheType> {
 	private:
@@ -138,7 +138,7 @@ namespace catapult { namespace mongo { namespace storages {
 
 			auto filter = CreateDeleteFilter(ids);
 			auto deleteResult = collection.delete_many(filter.view());
-			m_errorPolicy.checkDeletedAtLeast(ids.size(), BulkWriteResult(deleteResult.get().result()), "removed and modified elements");
+			m_errorPolicy.checkDeletedAtLeast(ids.size(), BulkWriteResult(deleteResult.value().result()), "removed and modified elements");
 		}
 
 		void insertAll(const ElementContainerType& elements) {
@@ -196,7 +196,7 @@ namespace catapult { namespace mongo { namespace storages {
 		model::NetworkIdentifier m_networkIdentifier;
 	};
 
-	/// A mongo cache storage that persists flat cache data using delete and upsert.
+	/// Mongo cache storage that persists flat cache data using delete and upsert.
 	template<typename TCacheTraits>
 	class MongoFlatCacheStorage : public ExternalCacheStorageT<typename TCacheTraits::CacheType> {
 	private:

@@ -22,7 +22,7 @@
 #include "catapult/cache/CacheDatabaseMixin.h"
 #include "catapult/cache/CacheDescriptorAdapters.h"
 #include "catapult/deltaset/BaseSetDelta.h"
-#include "catapult/model/NetworkInfo.h"
+#include "catapult/model/NetworkIdentifier.h"
 #include "catapult/state/AccountState.h"
 #include "catapult/utils/Casting.h"
 #include "catapult/utils/Hashers.h"
@@ -86,6 +86,9 @@ namespace catapult { namespace cache {
 			/// Minimum harvester balance.
 			/// \note This doubles as the minimum balance of tracked high value accounts.
 			Amount MinHarvesterBalance;
+
+			/// Maximum harvester balance.
+			Amount MaxHarvesterBalance;
 
 			/// Mosaic id used as primary chain currency.
 			MosaicId CurrencyMosaicId;

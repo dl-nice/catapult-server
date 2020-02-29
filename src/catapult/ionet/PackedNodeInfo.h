@@ -72,11 +72,11 @@ namespace catapult { namespace ionet {
 	/// Information about a node and its interactions.
 	struct PackedNodeInfo : public model::TrailingVariableDataLayout<PackedNodeInfo, PackedConnectionState> {
 	public:
-		/// Node unique identifier.
-		Key IdentityKey;
-
 		/// Node source.
 		NodeSource Source;
+
+		/// Node unique identifier.
+		Key IdentityKey;
 
 		/// Node interactions.
 		PackedNodeInteractions Interactions;
@@ -84,15 +84,18 @@ namespace catapult { namespace ionet {
 		/// Number of connection states.
 		uint8_t ConnectionStatesCount;
 
+		/// Reserved padding to align end of PackedNodeInfo on 8-byte boundary.
+		uint8_t PackedNodeInfo_Reserved1[7];
+
 		// followed by connection states if ConnectionStatesCount != 0
 
 	public:
-		/// Returns a const pointer to the first connection state contained in this node info.
+		/// Gets a const pointer to the first connection state contained in this node info.
 		const PackedConnectionState* ConnectionStatesPtr() const {
 			return ConnectionStatesCount ? ToTypedPointer(PayloadStart(*this)) : nullptr;
 		}
 
-		/// Returns a pointer to the first connection state contained in this node info.
+		/// Gets a pointer to the first connection state contained in this node info.
 		PackedConnectionState* ConnectionStatesPtr() {
 			return ConnectionStatesCount ? ToTypedPointer(PayloadStart(*this)) : nullptr;
 		}

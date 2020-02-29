@@ -219,7 +219,7 @@ namespace catapult { namespace zeromq {
 		// Arrange:
 		EntityPublisherContext context;
 		auto pTransaction = mocks::CreateMockTransaction(0);
-		auto recipientAddress = model::PublicKeyToAddress(pTransaction->Recipient, model::NetworkIdentifier(pTransaction->Network()));
+		auto recipientAddress = model::PublicKeyToAddress(pTransaction->RecipientPublicKey, pTransaction->Network);
 		auto unresolvedRecipientAddress = extensions::CopyToUnresolvedAddress(recipientAddress);
 		auto transactionInfo = ToTransactionInfo(std::move(pTransaction));
 		Height height(123);
@@ -315,7 +315,7 @@ namespace catapult { namespace zeromq {
 		context.publishTransactionStatus(*pTransaction, hash, 123);
 
 		// Assert:
-		model::TransactionStatus expectedTransactionStatus(hash, 123, pTransaction->Deadline);
+		model::TransactionStatus expectedTransactionStatus(hash, pTransaction->Deadline, 123);
 		test::AssertMessages(context.zmqSocket(), marker, addresses, [&expectedTransactionStatus](const auto& message, const auto& topic) {
 			test::AssertTransactionStatusMessage(message, topic, expectedTransactionStatus);
 		});

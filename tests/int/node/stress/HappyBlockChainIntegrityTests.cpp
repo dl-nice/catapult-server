@@ -56,10 +56,11 @@ namespace catapult { namespace local {
 		}
 
 		ionet::Node CreateNode(uint32_t id) {
-			auto metadata = ionet::NodeMetadata(model::NetworkIdentifier::Mijin_Test, "NODE " + std::to_string(id));
+			auto networkFingerprint = model::UniqueNetworkFingerprint(model::NetworkIdentifier::Mijin_Test);
+			auto metadata = ionet::NodeMetadata(networkFingerprint, "NODE " + std::to_string(id));
 			metadata.Roles = ionet::NodeRoles::Peer;
 			return ionet::Node(
-					crypto::KeyPair::FromString(test::Mijin_Test_Private_Keys[id]).publicKey(),
+					{ crypto::KeyPair::FromString(test::Mijin_Test_Private_Keys[id]).publicKey(), std::to_string(id) },
 					test::CreateLocalHostNodeEndpoint(GetPortForNode(id)),
 					metadata);
 		}
@@ -90,7 +91,7 @@ namespace catapult { namespace local {
 
 			// 3. give each node its own key
 			auto& userConfig = const_cast<config::UserConfiguration&>(config.User);
-			userConfig.BootKey = test::Mijin_Test_Private_Keys[id];
+			userConfig.BootPrivateKey = test::Mijin_Test_Private_Keys[id];
 
 			// 4. ensure configuration is valid
 			ValidateConfiguration(config);
@@ -105,6 +106,8 @@ namespace catapult { namespace local {
 			pt::read_ini(configFilePath, properties);
 
 			// 1. reconnect more rapidly so nodes have a better chance to find each other
+			properties.put("static node refresh task.startDelay", "5ms");
+			properties.put("static node refresh task.minDelay", "500ms");
 			properties.put("connect peers task for service Sync.startDelay", "1s");
 			properties.put("connect peers task for service Sync.repeatDelay", "500ms");
 
@@ -238,7 +241,7 @@ namespace catapult { namespace local {
 
 				model::BlockStatementBuilder blockStatementBuilder;
 				auto currencyMosaicId = test::Default_Currency_Mosaic_Id;
-				model::BalanceChangeReceipt receipt(model::Receipt_Type_Harvest_Fee, block.Signer, currencyMosaicId, totalFee);
+				model::BalanceChangeReceipt receipt(model::Receipt_Type_Harvest_Fee, block.SignerPublicKey, currencyMosaicId, totalFee);
 				blockStatementBuilder.addReceipt(receipt);
 
 				auto pStatement = blockStatementBuilder.build();

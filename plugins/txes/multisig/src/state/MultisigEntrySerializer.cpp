@@ -33,12 +33,12 @@ namespace catapult { namespace state {
 	}
 
 	void MultisigEntrySerializer::Save(const MultisigEntry& entry, io::OutputStream& output) {
-		io::Write8(output, entry.minApproval());
-		io::Write8(output, entry.minRemoval());
+		io::Write32(output, entry.minApproval());
+		io::Write32(output, entry.minRemoval());
 		output.write(entry.key());
 
-		SaveKeySet(output, entry.cosignatories());
-		SaveKeySet(output, entry.multisigAccounts());
+		SaveKeySet(output, entry.cosignatoryPublicKeys());
+		SaveKeySet(output, entry.multisigPublicKeys());
 	}
 
 	namespace {
@@ -53,8 +53,8 @@ namespace catapult { namespace state {
 	}
 
 	MultisigEntry MultisigEntrySerializer::Load(io::InputStream& input) {
-		auto minApproval = io::Read8(input);
-		auto minRemoval = io::Read8(input);
+		auto minApproval = io::Read32(input);
+		auto minRemoval = io::Read32(input);
 		Key key;
 		input.read(key);
 
@@ -62,8 +62,8 @@ namespace catapult { namespace state {
 		entry.setMinApproval(minApproval);
 		entry.setMinRemoval(minRemoval);
 
-		LoadKeySet(input, entry.cosignatories());
-		LoadKeySet(input, entry.multisigAccounts());
+		LoadKeySet(input, entry.cosignatoryPublicKeys());
+		LoadKeySet(input, entry.multisigPublicKeys());
 		return entry;
 	}
 }}

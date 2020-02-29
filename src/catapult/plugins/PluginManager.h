@@ -48,8 +48,8 @@ namespace catapult { namespace plugins {
 		utils::FileSize MaxCacheDatabaseWriteBatchSize;
 	};
 
-	/// A manager for registering plugins.
-	class PluginManager {
+	/// Manager for registering plugins.
+	class PLUGIN_API_DEPENDENCY PluginManager {
 	private:
 		using HandlerHook = consumer<ionet::ServerPacketHandlers&, const cache::CatapultCache&>;
 		using CounterHook = consumer<std::vector<utils::DiagnosticCounter>&, const cache::CatapultCache&>;

@@ -3,6 +3,90 @@ All notable changes to this project will be documented in this file.
 
 The changelog format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.9.2.1] - 23-January-2019
+
+## Fixed
+ - bugfix: incomplete nemesis block data inside mongo
+ - bugfix: remove spurious check in CreateCacheBlockTouchObserver
+ - bugfix: make unconditional update of activity information based on account balance
+ - minor: do not migrate node identity key (when source is worse)
+ - minor: reprocessing of aggregates with different set of cosigners
+
+## [0.9.1.1] - 06-December-2019
+
+### Added
+ - Make nemesis epoch time configurable
+ - Network setting: maxHarvesterBalance
+
+### Fixed
+ - Multiple recovery fixes
+ - Avoid banning hosts defined as local network
+ - Fixed point math based block time smoothing
+ - Unlocked accounts duplicate handling
+ - Propagate single blocks properly (unused mask)
+ - Mongo: save only non-empty account restrictions
+ - Mongo: missing transactionHash of aggregate transaction
+
+## [0.9.0.1] - 08-November-2019
+
+### Added
+ - Support for `make install`
+
+### Changed
+ - Add hash variant name to binary descriptions
+ - Realign transaction binary layouts to maximize alignment of fields
+ - Add `AggregateTransaction::TransactionHash` that contains merkle hash of component transactions
+ - Store `Version` and `Network` directly in `EntityBody`
+
+### Fixed
+ - GitHub Issues: #45 #46 #47 #48 #49 #50
+ - Bug in harvester `StateHash` calculation when `transactionSelectionStrategy` is not `oldest`
+ - Fix remaining UBSAN and TSAN warnings
+
+## [0.8.0.3] - 02-October-2019
+
+### Added
+ - Ability for network to identify servers by resolved IP instead of public key
+   - require single public key to map to single host at one time
+ - Basic DoS protection
+   - ban nodes that send transactions that fail stateless validation
+   - ban nodes that exceed data threshold
+   - close connections that send data unexpectedly
+ - Monitoring of static nodes for IP changes
+
+### Changed
+ - Add support for clang 9 and gcc 9
+ - Update all dependencies to latest versions
+ - Final set of naming review changes (mongo, config, results)
+ - Fix some UBSAN and TSAN warnings
+
+### Fixed
+ - Bug in delegated harvester unlocking message processing
+ - Namespace and lock expiry receipt generation
+ - Notify cosignatories' public keys in order to allow added cosignatories to get aggregate notifications
+ - Potential deadlock in SpinReaderWriterLock
+
+## [0.7.0.1] - 02-September-2019
+
+### Added
+ - TrustedHosts filter for diagnostic packet handlers
+ - Prohibition of zero-based keys and derived addresses
+ - Delegated harvester unlocking (via special encrypted message directed to node owner)
+ - Dynamic rental fees
+
+### Changed
+ - Naming review changes:
+   - catbuffer (models, validators, etc)
+   - mongo naming review changes
+   - config variable naming
+ - Use donna ed25519 implementation, use batched signature verification
+ - Use non-reversed private keys in `SIGNATURE_SCHEME_NIS1` - this change will require private keys used in catapult to be un-reversed, when switching from NIS1
+ - Generate nemesis block statement
+ - Turn coresystem into plugin
+
+### Fixed
+ - Bug in harvesting ut facade factory
+
 ## [0.6.0.1] - 26-July-2019
 
 ### Added
@@ -50,7 +134,7 @@ The changelog format is based on [Keep a Changelog](https://keepachangelog.com/e
 
 ### Changed
 - Prevent transactions from being replayed on different networks by prepending the network generation hash to transaction data prior to signing and verifying.
-- Cosigners must opt-in before being added to a multisig account.
+- Cosignatories must opt-in before being added to a multisig account.
 - Allow use of same secret with different recipients by adding Recipient to SecretLockTransaction.
 - HashLockTransaction Mosaic supports aliases to to the currency mosaic.
 - Allow aggregate bonded transaction lifetime to be configured independently of other transactions.
@@ -108,6 +192,11 @@ The changelog format is based on [Keep a Changelog](https://keepachangelog.com/e
 ### Added
 - Initial code release.
 
+[0.9.2.1]: https://github.com/nemtech/catapult-server/compare/v0.9.1.1...v0.9.2.1
+[0.9.1.1]: https://github.com/nemtech/catapult-server/compare/v0.9.0.1...v0.9.1.1
+[0.9.0.1]: https://github.com/nemtech/catapult-server/compare/v0.8.0.3...v0.9.0.1
+[0.8.0.3]: https://github.com/nemtech/catapult-server/compare/v0.7.0.1...v0.8.0.3
+[0.7.0.1]: https://github.com/nemtech/catapult-server/compare/v0.6.0.1...v0.7.0.1
 [0.6.0.1]: https://github.com/nemtech/catapult-server/compare/v0.5.0.1...v0.6.0.1
 [0.5.0.1]: https://github.com/nemtech/catapult-server/compare/v0.4.0.1...v0.5.0.1
 [0.4.0.1]: https://github.com/nemtech/catapult-server/compare/v0.3.0.2...v0.4.0.1

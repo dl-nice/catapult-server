@@ -34,9 +34,9 @@ namespace catapult {
 
 namespace catapult { namespace mongo {
 
-	/// A typed mongo transaction plugin.
+	/// Typed mongo transaction plugin.
 	template<typename TTransaction>
-	class MongoTransactionPluginT {
+	class PLUGIN_API_DEPENDENCY MongoTransactionPluginT {
 	public:
 		virtual ~MongoTransactionPluginT() = default;
 
@@ -44,15 +44,15 @@ namespace catapult { namespace mongo {
 		/// Gets the transaction entity type.
 		virtual model::EntityType type() const = 0;
 
-		/// Streams a \a transaction to \a builder.
+		/// Streams \a transaction to \a builder.
 		virtual void streamTransaction(bsoncxx::builder::stream::document& builder, const TTransaction& transaction) const = 0;
 	};
 
-	/// An embedded mongo transaction plugin.
-	class EmbeddedMongoTransactionPlugin : public MongoTransactionPluginT<model::EmbeddedTransaction> {};
+	/// Embedded mongo transaction plugin.
+	class PLUGIN_API_DEPENDENCY EmbeddedMongoTransactionPlugin : public MongoTransactionPluginT<model::EmbeddedTransaction> {};
 
-	/// A mongo transaction plugin.
-	class MongoTransactionPlugin : public MongoTransactionPluginT<model::Transaction> {
+	/// Mongo transaction plugin.
+	class PLUGIN_API_DEPENDENCY MongoTransactionPlugin : public MongoTransactionPluginT<model::Transaction> {
 	public:
 		/// Extracts dependent documents from \a transaction given the associated \a metadata.
 		/// \note The document representing the transaction is created separately via the streamTransaction() call.
@@ -67,6 +67,6 @@ namespace catapult { namespace mongo {
 		virtual const EmbeddedMongoTransactionPlugin& embeddedPlugin() const = 0;
 	};
 
-	/// A registry of mongo transaction plugins.
+	/// Registry of mongo transaction plugins.
 	class MongoTransactionRegistry : public model::TransactionRegistryT<MongoTransactionPlugin> {};
 }}

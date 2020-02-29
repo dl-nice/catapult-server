@@ -43,15 +43,17 @@ namespace catapult { namespace model {
 #define LOAD_NETWORK_PROPERTY(NAME) utils::LoadIniProperty(bag, "network", #NAME, config.Network.NAME)
 
 		LOAD_NETWORK_PROPERTY(Identifier);
+		LOAD_NETWORK_PROPERTY(NodeEqualityStrategy);
 		LOAD_NETWORK_PROPERTY(PublicKey);
 		LOAD_NETWORK_PROPERTY(GenerationHash);
+		LOAD_NETWORK_PROPERTY(EpochAdjustment);
 
 #undef LOAD_NETWORK_PROPERTY
 
 #define LOAD_CHAIN_PROPERTY(NAME) utils::LoadIniProperty(bag, "chain", #NAME, config.NAME)
 
-		LOAD_CHAIN_PROPERTY(ShouldEnableVerifiableState);
-		LOAD_CHAIN_PROPERTY(ShouldEnableVerifiableReceipts);
+		LOAD_CHAIN_PROPERTY(EnableVerifiableState);
+		LOAD_CHAIN_PROPERTY(EnableVerifiableReceipts);
 
 		LOAD_CHAIN_PROPERTY(CurrencyMosaicId);
 		LOAD_CHAIN_PROPERTY(HarvestingMosaicId);
@@ -63,6 +65,7 @@ namespace catapult { namespace model {
 		LOAD_CHAIN_PROPERTY(ImportanceActivityPercentage);
 		LOAD_CHAIN_PROPERTY(MaxRollbackBlocks);
 		LOAD_CHAIN_PROPERTY(MaxDifficultyBlocks);
+		LOAD_CHAIN_PROPERTY(DefaultDynamicFeeMultiplier);
 
 		LOAD_CHAIN_PROPERTY(MaxTransactionLifetime);
 		LOAD_CHAIN_PROPERTY(MaxBlockFutureTime);
@@ -72,6 +75,7 @@ namespace catapult { namespace model {
 
 		LOAD_CHAIN_PROPERTY(TotalChainImportance);
 		LOAD_CHAIN_PROPERTY(MinHarvesterBalance);
+		LOAD_CHAIN_PROPERTY(MaxHarvesterBalance);
 		LOAD_CHAIN_PROPERTY(HarvestBeneficiaryPercentage);
 
 		LOAD_CHAIN_PROPERTY(BlockPruneInterval);
@@ -94,7 +98,7 @@ namespace catapult { namespace model {
 			numPluginProperties += iter->second.size();
 		}
 
-		utils::VerifyBagSizeLte(bag, 22 + numPluginProperties);
+		utils::VerifyBagSizeLte(bag, 5 + 21 + numPluginProperties);
 		return config;
 	}
 
